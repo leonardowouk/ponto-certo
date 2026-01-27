@@ -20,6 +20,14 @@ async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
   }
 }
 
+async function sha256Hex(input: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(input);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -57,17 +65,75 @@ serve(async (req) => {
 
     console.log(`[ponto-validate] Action: ${action}`);
 
-    // Validar device_secret
+    // Resolver dispositivo (garante device_id não-nulo ao inserir em time_punches)
+    if (!device_secret || typeof device_secret !== 'string') {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Dispositivo inválido' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const deviceSecretHash = await sha256Hex(device_secret);
+
+    // 1) Tenta encontrar dispositivo ativo com esse secret
     const { data: device } = await supabase
       .from('time_devices')
       .select('id, nome, unidade, ativo')
       .eq('ativo', true)
-      .limit(1)
+      .eq('device_secret_hash', deviceSecretHash)
       .maybeSingle();
 
-    // Para demo, aceitar se não houver dispositivos cadastrados
-    const deviceId = device?.id || null;
-    const deviceUnidade = device?.unidade || unidade || 'Demo';
+    let deviceId: string | null = device?.id ?? null;
+    let deviceUnidade: string = device?.unidade || unidade || 'Demo';
+
+    // 2) Se não achou, mas não existe nenhum dispositivo ativo ainda, cria automaticamente (modo demo)
+    if (!deviceId) {
+      const { data: anyActiveDevice, error: anyActiveDeviceError } = await supabase
+        .from('time_devices')
+        .select('id')
+        .eq('ativo', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (anyActiveDeviceError) {
+        console.error('[ponto-validate] Device query error:', anyActiveDeviceError);
+        return new Response(
+          JSON.stringify({ success: false, message: 'Erro ao validar dispositivo' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      if (!anyActiveDevice) {
+        const autoUnidade = unidade || 'Demo';
+        const { data: createdDevice, error: createDeviceError } = await supabase
+          .from('time_devices')
+          .insert({
+            nome: 'Dispositivo Auto',
+            unidade: autoUnidade,
+            device_secret_hash: deviceSecretHash,
+            ativo: true,
+          })
+          .select('id, unidade')
+          .maybeSingle();
+
+        if (createDeviceError || !createdDevice?.id) {
+          console.error('[ponto-validate] Device create error:', createDeviceError);
+          return new Response(
+            JSON.stringify({ success: false, message: 'Erro ao criar dispositivo' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          );
+        }
+
+        deviceId = createdDevice.id;
+        deviceUnidade = createdDevice.unidade || autoUnidade;
+      } else {
+        // Existem dispositivos cadastrados, mas este secret não é autorizado
+        return new Response(
+          JSON.stringify({ success: false, message: 'Dispositivo não autorizado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+    }
 
     // Buscar colaborador pelo cpf_hash
     const { data: employee, error: empError } = await supabase
