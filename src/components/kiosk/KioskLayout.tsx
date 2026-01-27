@@ -1,0 +1,38 @@
+import { ReactNode } from 'react';
+import { useKioskClock } from '@/hooks/useKioskClock';
+import { Clock } from 'lucide-react';
+
+interface KioskLayoutProps {
+  children: ReactNode;
+}
+
+export function KioskLayout({ children }: KioskLayoutProps) {
+  const { formattedTime, formattedDate } = useKioskClock();
+
+  return (
+    <div className="min-h-screen kiosk-mode gradient-primary flex flex-col">
+      {/* Header com hora */}
+      <header className="flex items-center justify-between px-8 py-6">
+        <div className="flex items-center gap-3 text-primary-foreground/90">
+          <Clock className="w-6 h-6" />
+          <span className="text-lg font-medium capitalize">{formattedDate}</span>
+        </div>
+        <div className="time-display text-5xl font-bold text-primary-foreground tracking-wider">
+          {formattedTime}
+        </div>
+      </header>
+
+      {/* Conteúdo principal */}
+      <main className="flex-1 flex items-center justify-center p-8">
+        <div className="w-full max-w-lg">
+          {children}
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="px-8 py-4 text-center text-primary-foreground/60 text-sm">
+        Sistema de Ponto Eletrônico
+      </footer>
+    </div>
+  );
+}
