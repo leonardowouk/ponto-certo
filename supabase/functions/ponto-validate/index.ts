@@ -1,6 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+
+// Verify PIN using Web Crypto API (compatible with Edge Runtime)
+async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
+  try {
+    const [saltHex, expectedHash] = storedHash.split(':');
+    if (!saltHex || !expectedHash) return false;
+    
+    const encoder = new TextEncoder();
+    const data = encoder.encode(saltHex + pin);
+    
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    return hashHex === expectedHash;
+  } catch {
+    return false;
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,7 +118,7 @@ serve(async (req) => {
     // ACTION: VALIDATE (validar CPF e PIN)
     if (action === 'validate') {
       // Verificar PIN
-      const pinValid = await bcrypt.compare(pin, employee.pin_hash);
+      const pinValid = await verifyPin(pin, employee.pin_hash);
 
       if (!pinValid) {
         // Incrementar tentativas falhas
