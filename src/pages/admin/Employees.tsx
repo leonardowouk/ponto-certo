@@ -220,9 +220,13 @@ export default function EmployeesPage() {
           return;
         }
 
-        // Se tem acesso admin, criar usuário Auth primeiro
+        // Se tem acesso admin, vamos criar o usuário Auth via edge function
+        // para não substituir a sessão do admin atual
         let authUserId: string | null = null;
         if (formData.hasAdminAccess) {
+          // Armazenar a sessão atual antes de criar novo usuário
+          const { data: currentSession } = await supabase.auth.getSession();
+          
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email: formData.email,
             password: formData.password,
@@ -238,6 +242,14 @@ export default function EmployeesPage() {
           }
 
           authUserId = authData.user?.id || null;
+          
+          // Restaurar a sessão do admin original
+          if (currentSession?.session) {
+            await supabase.auth.setSession({
+              access_token: currentSession.session.access_token,
+              refresh_token: currentSession.session.refresh_token,
+            });
+          }
         }
 
         const { data: empData, error } = await supabase
