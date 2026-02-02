@@ -264,6 +264,7 @@ export default function KioskPage() {
 
       {step === 'selfie' && (
         <SelfieCapture 
+          key={`selfie-${Date.now()}`}
           onCapture={handleSelfieCapture}
           isLoading={isLoading}
         />
