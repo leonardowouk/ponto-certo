@@ -14,6 +14,7 @@ type CameraDebugInfo = {
   lastErrorName?: string;
   lastErrorMessage?: string;
   lastConstraintLabel?: string;
+  videoState?: string;
 };
 
 const errorMessages: Record<CameraError, { title: string; description: string }> = {
@@ -45,6 +46,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const [error, setError] = useState<CameraError | null>(null);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [debugInfo, setDebugInfo] = useState<CameraDebugInfo>({});
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -65,6 +67,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
     }
     setStream(null);
     setCameraReady(false);
+    setVideoPlaying(false);
   }, [stream]);
 
   const startCamera = useCallback(async () => {
@@ -74,6 +77,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
     setIsStartingCamera(true);
     setError(null);
     setDebugInfo({});
+    setVideoPlaying(false);
 
     // Limpar stream anterior
     stopCamera();
@@ -117,11 +121,13 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
       let mediaStream: MediaStream | null = null;
       let lastErr: unknown = null;
+      let successLabel = '';
 
       for (const attempt of attempts) {
         try {
           setDebugInfo(prev => ({ ...prev, lastConstraintLabel: attempt.label }));
           mediaStream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          successLabel = attempt.label;
           break;
         } catch (e) {
           lastErr = e;
@@ -139,21 +145,68 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       
       streamRef.current = mediaStream;
       setStream(mediaStream);
+      setDebugInfo(prev => ({ ...prev, lastConstraintLabel: successLabel, videoState: 'connecting' }));
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
+      // Aguardar o vídeo estar pronto antes de considerar câmera pronta
+      const video = videoRef.current;
+      if (video) {
+        // Limpar srcObject antes de reatribuir (ajuda em alguns dispositivos)
+        video.srcObject = null;
+        video.srcObject = mediaStream;
+        
+        setDebugInfo(prev => ({ ...prev, videoState: 'srcObject assigned' }));
 
-        // Em alguns Androids, autoPlay pode não iniciar imediatamente; tentamos dar play.
+        // Usar evento 'loadedmetadata' + 'playing' para garantir que o vídeo está funcionando
+        const onLoadedMetadata = () => {
+          setDebugInfo(prev => ({ ...prev, videoState: 'loadedmetadata' }));
+        };
+        
+        const onPlaying = () => {
+          setDebugInfo(prev => ({ ...prev, videoState: 'playing' }));
+          setVideoPlaying(true);
+          setCameraReady(true);
+          video.removeEventListener('loadedmetadata', onLoadedMetadata);
+          video.removeEventListener('playing', onPlaying);
+          video.removeEventListener('canplay', onCanPlay);
+        };
+
+        const onCanPlay = () => {
+          setDebugInfo(prev => ({ ...prev, videoState: 'canplay' }));
+          // Em alguns dispositivos Samsung, o evento 'playing' não dispara
+          // Se canplay disparar, tentamos forçar o play
+          video.play().then(() => {
+            setVideoPlaying(true);
+            setCameraReady(true);
+          }).catch(() => {
+            // Se falhar, deixamos o autoPlay tentar
+          });
+        };
+
+        video.addEventListener('loadedmetadata', onLoadedMetadata);
+        video.addEventListener('playing', onPlaying);
+        video.addEventListener('canplay', onCanPlay);
+
+        // Tentar dar play manualmente (necessário em alguns Androids)
         try {
-          await videoRef.current.play();
-        } catch {
+          await video.play();
+          setDebugInfo(prev => ({ ...prev, videoState: 'play() called' }));
+        } catch (playErr) {
+          setDebugInfo(prev => ({ ...prev, videoState: `play error: ${playErr}` }));
           // Ignorar — o autoplay/muted pode iniciar sozinho.
         }
+
+        // Fallback: se após 2 segundos ainda não estiver playing, marcar como pronto mesmo assim
+        setTimeout(() => {
+          if (!cameraReady && streamRef.current) {
+            setDebugInfo(prev => ({ ...prev, videoState: 'timeout fallback' }));
+            setVideoPlaying(true);
+            setCameraReady(true);
+          }
+        }, 2000);
       }
       
       setError(null);
       setRetryCount(0);
-      setCameraReady(true);
     } catch (err) {
       console.error('Camera error:', err);
       
@@ -194,7 +247,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       setIsStartingCamera(false);
       isStartingRef.current = false;
     }
-  }, [retryCount, stopCamera]);
+  }, [retryCount, stopCamera, cameraReady]);
 
   // Cleanup ao desmontar - NÃO iniciar automaticamente (requer gesto do usuário em mobile)
   useEffect(() => {
@@ -220,13 +273,17 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
     if (!context) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Garantir que o vídeo tem dimensões válidas
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+
+    canvas.width = width;
+    canvas.height = height;
     
     // Flip horizontally for selfie
-    context.translate(canvas.width, 0);
+    context.translate(width, 0);
     context.scale(-1, 1);
-    context.drawImage(video, 0, 0);
+    context.drawImage(video, 0, 0, width, height);
 
     const imageData = canvas.toDataURL('image/jpeg', 0.8);
     setCapturedImage(imageData);
@@ -237,6 +294,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const retakePhoto = useCallback(() => {
     setCapturedImage(null);
     setCameraReady(false);
+    setVideoPlaying(false);
     vibrate('light');
     startCamera();
   }, [startCamera, vibrate]);
@@ -254,6 +312,10 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
     startCamera();
   }, [startCamera, vibrate]);
 
+  // Determinar se devemos mostrar o vídeo (câmera ativa e stream conectado)
+  const showVideo = cameraReady && !capturedImage && !error;
+  const showLoading = isStartingCamera || (cameraReady && !videoPlaying && !capturedImage && !error);
+
   return (
     <div className="bg-card rounded-3xl p-8 card-elevated-lg animate-scale-in">
       <div className="text-center mb-6">
@@ -269,10 +331,10 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       </div>
 
       {/* Camera view */}
-      <div className="relative aspect-[4/3] bg-muted rounded-2xl overflow-hidden mb-6">
+      <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden mb-6">
         {!cameraReady && !error && !isStartingCamera ? (
           // Tela inicial - botão para iniciar câmera (obrigatório em mobile)
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 bg-muted">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
               <Camera className="w-10 h-10 text-primary" />
             </div>
@@ -281,7 +343,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
             </p>
             <Button
               type="button"
-              onPointerDown={handleStartCamera}
+              onTouchStart={handleStartCamera}
               onClick={handleStartCamera}
               className="h-14 px-8 text-lg rounded-xl kiosk-button"
             >
@@ -289,13 +351,8 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
               Ativar Câmera
             </Button>
           </div>
-        ) : isStartingCamera && !error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-            <Loader2 className="w-10 h-10 text-primary animate-spin" />
-            <p className="text-muted-foreground text-sm">Iniciando câmera...</p>
-          </div>
         ) : error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-muted">
             <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
               <AlertCircle className="w-8 h-8 text-destructive" />
             </div>
@@ -306,7 +363,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
               {errorMessages[error].description}
             </p>
 
-            {(debugInfo.lastErrorName || debugInfo.lastConstraintLabel) && (
+            {(debugInfo.lastErrorName || debugInfo.lastConstraintLabel || debugInfo.videoState) && (
               <div className="mb-4 w-full max-w-sm rounded-xl bg-muted/50 p-3 text-left">
                 <p className="text-xs font-medium text-foreground">Detalhes (debug)</p>
                 {debugInfo.lastConstraintLabel && (
@@ -317,6 +374,9 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
                 )}
                 {debugInfo.lastErrorMessage && (
                   <p className="text-xs text-muted-foreground break-words">Msg: {debugInfo.lastErrorMessage}</p>
+                )}
+                {debugInfo.videoState && (
+                  <p className="text-xs text-muted-foreground">Video: {debugInfo.videoState}</p>
                 )}
               </div>
             )}
@@ -337,21 +397,36 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-            style={{ transform: 'scaleX(-1)' }}
-          />
+          <>
+            {/* Video element - sempre presente quando câmera está ativa */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              webkit-playsinline="true"
+              className="w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)' }}
+            />
+            
+            {/* Loading overlay sobre o vídeo enquanto não está playing */}
+            {showLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-muted/90">
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                <p className="text-muted-foreground text-sm">Iniciando câmera...</p>
+                {debugInfo.videoState && (
+                  <p className="text-xs text-muted-foreground">Estado: {debugInfo.videoState}</p>
+                )}
+              </div>
+            )}
+          </>
         )}
         
         {/* Overlay guide */}
-        {!capturedImage && !error && !isStartingCamera && (
+        {showVideo && videoPlaying && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-48 h-56 border-4 border-dashed border-primary/50 rounded-full" />
+              <div className="w-48 h-56 border-4 border-dashed border-white/50 rounded-full" />
             </div>
           </div>
         )}
@@ -390,7 +465,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
         <Button
           type="button"
           onClick={capturePhoto}
-          disabled={!!error || isStartingCamera}
+          disabled={!!error || !videoPlaying}
           className="w-full h-16 text-xl font-semibold rounded-2xl kiosk-button"
         >
           <Camera className="w-6 h-6 mr-2" />
