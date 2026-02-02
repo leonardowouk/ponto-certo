@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -21,8 +20,9 @@ import {
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Download, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Download, Calendar, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { formatMinutesToHours, getPunchTypeLabel } from '@/lib/hash';
+import { PunchDetailsModal } from '@/components/admin/PunchDetailsModal';
 
 interface Employee {
   id: string;
@@ -60,6 +60,12 @@ export default function TimesheetPage() {
   });
   const [timesheets, setTimesheets] = useState<TimesheetEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detailsModal, setDetailsModal] = useState<{
+    open: boolean;
+    employeeId: string;
+    employeeName: string;
+    workDate: string;
+  }>({ open: false, employeeId: '', employeeName: '', workDate: '' });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -264,12 +270,13 @@ export default function TimesheetPage() {
                       <TableHead>Esperado</TableHead>
                       <TableHead>Saldo</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {timesheets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           Nenhum registro encontrado
                         </TableCell>
                       </TableRow>
@@ -314,6 +321,21 @@ export default function TimesheetPage() {
                             </span>
                           </TableCell>
                           <TableCell>{getStatusBadge(ts.status)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDetailsModal({
+                                open: true,
+                                employeeId: ts.employee_id,
+                                employeeName: ts.employee_name,
+                                workDate: ts.work_date,
+                              })}
+                            >
+                              <Eye className="w-4 h-4 mr-1" />
+                              Ver
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -323,6 +345,15 @@ export default function TimesheetPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Modal de detalhes */}
+        <PunchDetailsModal
+          open={detailsModal.open}
+          onOpenChange={(open) => setDetailsModal(prev => ({ ...prev, open }))}
+          employeeId={detailsModal.employeeId}
+          employeeName={detailsModal.employeeName}
+          workDate={detailsModal.workDate}
+        />
       </div>
     </AdminLayout>
   );
