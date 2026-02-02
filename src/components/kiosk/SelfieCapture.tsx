@@ -49,6 +49,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const [videoPlaying, setVideoPlaying] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [debugInfo, setDebugInfo] = useState<CameraDebugInfo>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -300,11 +301,12 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   }, [startCamera, vibrate]);
 
   const confirmPhoto = useCallback(() => {
-    if (capturedImage) {
+    if (capturedImage && !isSubmitting) {
+      setIsSubmitting(true);
       vibrate('success');
       onCapture(capturedImage);
     }
-  }, [capturedImage, onCapture, vibrate]);
+  }, [capturedImage, onCapture, vibrate, isSubmitting]);
 
   const handleRetryCamera = useCallback(() => {
     vibrate('light');
@@ -442,7 +444,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
             type="button"
             variant="outline"
             onClick={retakePhoto}
-            disabled={isLoading}
+            disabled={isLoading || isSubmitting}
             className="flex-1 h-14 text-lg rounded-xl"
           >
             <RotateCcw className="w-5 h-5 mr-2" />
@@ -451,15 +453,15 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
           <Button
             type="button"
             onClick={confirmPhoto}
-            disabled={isLoading}
+            disabled={isLoading || isSubmitting}
             className="flex-1 h-14 text-lg rounded-xl kiosk-button gradient-success border-0"
           >
-            {isLoading ? (
+            {(isLoading || isSubmitting) ? (
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
             ) : (
               <Check className="w-5 h-5 mr-2" />
             )}
-            Registrar Ponto
+            {isSubmitting ? 'Registrando...' : 'Registrar Ponto'}
           </Button>
         </div>
       ) : (
