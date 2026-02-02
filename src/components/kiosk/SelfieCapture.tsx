@@ -332,25 +332,13 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
       {/* Camera view */}
       <div className="relative aspect-[4/3] bg-black rounded-2xl overflow-hidden mb-6">
-        {!cameraReady && !error && !isStartingCamera ? (
-          // Tela inicial - botão para iniciar câmera (obrigatório em mobile)
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 bg-muted">
-            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-              <Camera className="w-10 h-10 text-primary" />
-            </div>
-            <p className="text-muted-foreground text-sm text-center">
-              Toque no botão abaixo para ativar a câmera
-            </p>
-            <Button
-              type="button"
-              onTouchStart={handleStartCamera}
-              onClick={handleStartCamera}
-              className="h-14 px-8 text-lg rounded-xl kiosk-button"
-            >
-              <Camera className="w-5 h-5 mr-2" />
-              Ativar Câmera
-            </Button>
-          </div>
+        {capturedImage ? (
+          // Mostrar imagem capturada PRIMEIRO (prioridade sobre outros estados)
+          <img 
+            src={capturedImage} 
+            alt="Selfie capturada"
+            className="w-full h-full object-cover"
+          />
         ) : error ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-muted">
             <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
@@ -390,12 +378,25 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
               Tentar novamente
             </Button>
           </div>
-        ) : capturedImage ? (
-          <img 
-            src={capturedImage} 
-            alt="Selfie capturada"
-            className="w-full h-full object-cover"
-          />
+        ) : !cameraReady && !isStartingCamera ? (
+          // Tela inicial - botão para iniciar câmera (obrigatório em mobile)
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 bg-muted">
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+              <Camera className="w-10 h-10 text-primary" />
+            </div>
+            <p className="text-muted-foreground text-sm text-center">
+              Toque no botão abaixo para ativar a câmera
+            </p>
+            <Button
+              type="button"
+              onTouchStart={handleStartCamera}
+              onClick={handleStartCamera}
+              className="h-14 px-8 text-lg rounded-xl kiosk-button"
+            >
+              <Camera className="w-5 h-5 mr-2" />
+              Ativar Câmera
+            </Button>
+          </div>
         ) : (
           <>
             {/* Video element - sempre presente quando câmera está ativa */}
