@@ -173,13 +173,28 @@
   .status-revisao { @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400; }
   .status-falta { @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400; }
 
-  /* Numeric keypad styling */
+  /* Numeric keypad styling - optimized for touch */
   .keypad-button {
     @apply w-20 h-20 text-2xl font-semibold rounded-2xl 
            bg-white border-2 border-border
-           transition-all duration-150
-           active:scale-95 active:bg-muted;
+           transition-transform duration-75 ease-out
+           active:scale-[0.92] active:bg-primary/10;
     box-shadow: 0 2px 8px hsl(var(--foreground) / 0.06);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .keypad-button:active {
+    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.08);
+  }
+
+  /* Larger touch target on tablets */
+  @media (min-width: 768px) {
+    .keypad-button {
+      @apply w-24 h-24 text-3xl;
+    }
   }
 
   /* Time display */
