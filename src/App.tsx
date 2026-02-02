@@ -8,6 +8,7 @@ import Kiosk from "./pages/Kiosk";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/admin/Dashboard";
 import Employees from "./pages/admin/Employees";
+import Sectors from "./pages/admin/Sectors";
 import Timesheet from "./pages/admin/Timesheet";
 import HourBank from "./pages/admin/HourBank";
 import Settings from "./pages/admin/Settings";
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/employees" element={<Employees />} />
+          <Route path="/admin/sectors" element={<Sectors />} />
           <Route path="/admin/timesheet" element={<Timesheet />} />
           <Route path="/admin/hourbank" element={<HourBank />} />
           <Route path="/admin/settings" element={<Settings />} />

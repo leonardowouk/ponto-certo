@@ -20,10 +20,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, UserX, UserCheck, Loader2, Search } from 'lucide-react';
 import { hashCPF, formatCPF, validateCPF } from '@/lib/hash';
+
+interface Sector {
+  id: string;
+  nome: string;
+}
 
 interface Employee {
   id: string;
@@ -32,12 +44,15 @@ interface Employee {
   ativo: boolean;
   cargo: string | null;
   setor: string | null;
+  sector_id: string | null;
   data_admissao: string | null;
   created_at: string;
+  sectors?: { nome: string } | null;
 }
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [sectors, setSectors] = useState<Sector[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -50,29 +65,48 @@ export default function EmployeesPage() {
     cpf: '',
     pin: '',
     cargo: '',
-    setor: '',
+    sector_id: '',
     data_admissao: '',
   });
   const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
     loadEmployees();
+    loadSectors();
   }, []);
 
   const loadEmployees = async () => {
     try {
       const { data, error } = await supabase
         .from('employees')
-        .select('id, nome, cpf_hash, ativo, cargo, setor, data_admissao, created_at')
+        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, created_at, sectors(nome)')
         .order('nome');
 
       if (error) throw error;
-      setEmployees(data || []);
+      setEmployees((data || []).map(e => ({
+        ...e,
+        sectors: e.sectors as { nome: string } | null,
+      })));
     } catch (error) {
       console.error('Error loading employees:', error);
       toast({ title: 'Erro', description: 'Erro ao carregar colaboradores', variant: 'destructive' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSectors = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('sectors')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) throw error;
+      setSectors(data || []);
+    } catch (error) {
+      console.error('Error loading sectors:', error);
     }
   };
 
@@ -84,7 +118,7 @@ export default function EmployeesPage() {
         cpf: '',
         pin: '',
         cargo: employee.cargo || '',
-        setor: employee.setor || '',
+        sector_id: employee.sector_id || '',
         data_admissao: employee.data_admissao || '',
       });
     } else {
@@ -94,7 +128,7 @@ export default function EmployeesPage() {
         cpf: '',
         pin: '',
         cargo: '',
-        setor: '',
+        sector_id: '',
         data_admissao: '',
       });
     }
@@ -111,7 +145,7 @@ export default function EmployeesPage() {
         const updateData: Record<string, unknown> = {
           nome: formData.nome,
           cargo: formData.cargo || null,
-          setor: formData.setor || null,
+          sector_id: formData.sector_id || null,
           data_admissao: formData.data_admissao || null,
         };
 
@@ -169,7 +203,7 @@ export default function EmployeesPage() {
             cpf_hash: cpfHash,
             pin_hash: hashData.pin_hash,
             cargo: formData.cargo || null,
-            setor: formData.setor || null,
+            sector_id: formData.sector_id || null,
             data_admissao: formData.data_admissao || null,
           });
 
@@ -216,11 +250,12 @@ export default function EmployeesPage() {
     }
   };
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.setor?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEmployees = employees.filter(emp => {
+    const sectorName = emp.sectors?.nome || emp.setor || '';
+    return emp.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      sectorName.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <AdminLayout currentPage="employees">
@@ -299,12 +334,22 @@ export default function EmployeesPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="setor">Setor</Label>
-                    <Input
-                      id="setor"
-                      value={formData.setor}
-                      onChange={(e) => setFormData({ ...formData, setor: e.target.value })}
-                    />
+                    <Label htmlFor="sector_id">Setor</Label>
+                    <Select
+                      value={formData.sector_id}
+                      onValueChange={(v) => setFormData({ ...formData, sector_id: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o setor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sectors.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -370,7 +415,7 @@ export default function EmployeesPage() {
                       <TableRow key={employee.id}>
                         <TableCell className="font-medium">{employee.nome}</TableCell>
                         <TableCell>{employee.cargo || '-'}</TableCell>
-                        <TableCell>{employee.setor || '-'}</TableCell>
+                        <TableCell>{employee.sectors?.nome || employee.setor || '-'}</TableCell>
                         <TableCell>
                           <Badge variant={employee.ativo ? 'default' : 'secondary'}>
                             {employee.ativo ? 'Ativo' : 'Inativo'}

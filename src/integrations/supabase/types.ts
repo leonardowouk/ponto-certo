@@ -28,6 +28,7 @@ export type Database = {
           locked_until: string | null
           nome: string
           pin_hash: string
+          sector_id: string | null
           setor: string | null
           updated_at: string | null
         }
@@ -44,6 +45,7 @@ export type Database = {
           locked_until?: string | null
           nome: string
           pin_hash: string
+          sector_id?: string | null
           setor?: string | null
           updated_at?: string | null
         }
@@ -60,10 +62,19 @@ export type Database = {
           locked_until?: string | null
           nome?: string
           pin_hash?: string
+          sector_id?: string | null
           setor?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "employees_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: false
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       hour_bank_balance: {
         Row: {
@@ -179,6 +190,74 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sector_schedules: {
+        Row: {
+          break_minutes: number | null
+          created_at: string | null
+          expected_end: string
+          expected_start: string
+          id: string
+          sector_id: string
+          tolerance_early_minutes: number | null
+          tolerance_late_minutes: number | null
+          updated_at: string | null
+          weekly_days: Json | null
+        }
+        Insert: {
+          break_minutes?: number | null
+          created_at?: string | null
+          expected_end?: string
+          expected_start?: string
+          id?: string
+          sector_id: string
+          tolerance_early_minutes?: number | null
+          tolerance_late_minutes?: number | null
+          updated_at?: string | null
+          weekly_days?: Json | null
+        }
+        Update: {
+          break_minutes?: number | null
+          created_at?: string | null
+          expected_end?: string
+          expected_start?: string
+          id?: string
+          sector_id?: string
+          tolerance_early_minutes?: number | null
+          tolerance_late_minutes?: number | null
+          updated_at?: string | null
+          weekly_days?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sector_schedules_sector_id_fkey"
+            columns: ["sector_id"]
+            isOneToOne: true
+            referencedRelation: "sectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sectors: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
       }
       time_devices: {
         Row: {

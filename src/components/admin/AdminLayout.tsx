@@ -22,7 +22,8 @@ import {
   LayoutDashboard,
   Settings,
   LogOut,
-  Loader2
+  Loader2,
+  Building2
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -80,6 +81,7 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
     { id: 'employees', label: 'Colaboradores', icon: Users, href: '/admin/employees' },
+    { id: 'sectors', label: 'Setores', icon: Building2, href: '/admin/sectors' },
     { id: 'timesheet', label: 'Espelho de Ponto', icon: CalendarDays, href: '/admin/timesheet' },
     { id: 'hourbank', label: 'Banco de Horas', icon: Wallet, href: '/admin/hourbank' },
     { id: 'settings', label: 'Configurações', icon: Settings, href: '/admin/settings' },
