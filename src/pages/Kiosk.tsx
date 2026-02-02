@@ -46,6 +46,7 @@ export default function KioskPage() {
   const [punchResult, setPunchResult] = useState<PunchResult | null>(null);
   const [pinError, setPinError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selfieSessionId, setSelfieSessionId] = useState(0);
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
 
@@ -56,6 +57,7 @@ export default function KioskPage() {
     setPunchResult(null);
     setPinError('');
     setIsLoading(false);
+    setSelfieSessionId(0);
   }, []);
 
   // Inactivity timeout - reset after 60 seconds of no activity
@@ -134,6 +136,9 @@ export default function KioskPage() {
   };
 
   const handleConfirm = () => {
+    // Remonta o componente de selfie apenas ao ENTRAR nesta etapa,
+    // evitando reset visual durante renders (ex.: isLoading).
+    setSelfieSessionId(prev => prev + 1);
     setStep('selfie');
   };
 
@@ -264,7 +269,7 @@ export default function KioskPage() {
 
       {step === 'selfie' && (
         <SelfieCapture 
-          key={`selfie-${Date.now()}`}
+          key={`selfie-${selfieSessionId}`}
           onCapture={handleSelfieCapture}
           isLoading={isLoading}
         />
