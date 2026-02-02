@@ -67,9 +67,13 @@ export function PunchDetailsModal({
       const urls: Record<string, string> = {};
       for (const punch of data || []) {
         if (punch.selfie_url) {
+          // selfie_url is stored as "selfies_ponto/employee_id/date/timestamp.jpg"
+          // We need to remove the bucket prefix for createSignedUrl
+          const filePath = punch.selfie_url.replace(/^selfies_ponto\//, '');
+          
           const { data: signedData } = await supabase.storage
             .from('selfies_ponto')
-            .createSignedUrl(punch.selfie_url, 60 * 5); // 5 minutes
+            .createSignedUrl(filePath, 60 * 5); // 5 minutes
 
           if (signedData?.signedUrl) {
             urls[punch.id] = signedData.signedUrl;
