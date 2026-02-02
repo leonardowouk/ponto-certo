@@ -421,16 +421,43 @@ async function recalculateTimesheet(supabase: any, employeeId: string, workDate:
       }
     }
 
-    // Buscar jornada esperada
-    const { data: scheduleData } = await supabase
+    // Buscar jornada esperada: 1) individual, 2) setor, 3) padrão
+    let schedule: Schedule | null = null;
+    
+    // 1. Tentar jornada individual
+    const { data: individualSchedule } = await supabase
       .from('work_schedules')
       .select('expected_start, expected_end, break_minutes')
       .eq('employee_id', employeeId)
       .maybeSingle();
+    
+    if (individualSchedule) {
+      schedule = individualSchedule;
+    }
+    
+    // 2. Se não tem individual, buscar do setor
+    if (!schedule) {
+      const { data: employeeData } = await supabase
+        .from('employees')
+        .select('sector_id')
+        .eq('id', employeeId)
+        .maybeSingle();
+      
+      if (employeeData?.sector_id) {
+        const { data: sectorSchedule } = await supabase
+          .from('sector_schedules')
+          .select('expected_start, expected_end, break_minutes')
+          .eq('sector_id', employeeData.sector_id)
+          .maybeSingle();
+        
+        if (sectorSchedule) {
+          schedule = sectorSchedule;
+        }
+      }
+    }
 
-    const schedule: Schedule | null = scheduleData;
-
-    let expectedMinutes = 480; // 8 horas padrão
+    // 3. Calcular minutos esperados (padrão: 8h - 1h intervalo = 420min)
+    let expectedMinutes = 420;
     if (schedule && schedule.expected_start && schedule.expected_end) {
       const [startH, startM] = schedule.expected_start.split(':').map(Number);
       const [endH, endM] = schedule.expected_end.split(':').map(Number);
