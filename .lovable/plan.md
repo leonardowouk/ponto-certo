@@ -1,191 +1,154 @@
 
-# Plano: Horários por Setor
+# Plano de Melhorias - Modo Quiosque
 
-## Objetivo
-Criar uma estrutura para definir jornadas de trabalho por **setor** (departamento), permitindo que funcionários herdem automaticamente o horário ao serem vinculados a um setor.
+## Resumo da Situacao Atual
 
-## Arquitetura Proposta
+O modo quiosque ja possui uma estrutura funcional com:
+- Fluxo de 5 etapas: CPF -> PIN -> Confirmacao -> Selfie -> Sucesso
+- Validacao segura via edge function
+- Sistema de bloqueio apos 5 tentativas erradas (2 min)
+- Cooldown de 3 minutos entre batidas
+- Auto-reset apos 5 segundos na tela de sucesso
+
+## Problemas Identificados e Melhorias Propostas
+
+### 1. Tratamento de Erros e Feedback ao Usuario
+
+**Problema:** Erros sao mostrados via `alert()` nativo, que nao combina com a UI e pode ser confuso
+**Solucao:** Substituir todos os `alert()` por toasts elegantes ou mensagens inline
+
+**Problema:** Falta loading visual durante validacao do PIN
+**Solucao:** Adicionar estado de loading no botao "Confirmar"
+
+---
+
+### 2. Estabilidade da Camera (SelfieCapture)
+
+**Problema:** A camera pode falhar silenciosamente em alguns dispositivos
+**Solucao:** 
+- Adicionar retry automatico quando a camera falha
+- Mostrar instrucoes mais claras sobre permissoes
+- Adicionar botao para tentar novamente ao acessar camera
+- Tratar especificamente erros como "NotAllowedError" e "NotFoundError"
+
+**Problema:** Memory leak potencial - stream nao e parado corretamente em todos os casos
+**Solucao:** Garantir cleanup do stream em todos os cenarios (navegacao, erro, reset)
+
+---
+
+### 3. Timeout de Inatividade
+
+**Problema:** Se o usuario abandonar o tablet no meio do fluxo, ele fica preso
+**Solucao:** Adicionar timeout de inatividade (ex: 60 segundos) que volta para tela inicial
+
+---
+
+### 4. Estado Offline e Reconexao
+
+**Problema:** Nao ha tratamento para quando o tablet perde conexao
+**Solucao:** 
+- Detectar estado offline
+- Mostrar indicador visual de status de conexao
+- Bloquear acoes quando offline
+- Tentar reconectar automaticamente
+
+---
+
+### 5. Responsividade para Tablets
+
+**Problema:** O layout pode nao funcionar bem em tablets de diferentes tamanhos
+**Solucao:** 
+- Ajustar tamanho dos botoes do teclado para telas maiores
+- Garantir que a area de captura da camera use todo o espaco disponivel
+- Testar em diferentes resolucoes
+
+---
+
+### 6. Acessibilidade e UX
+
+**Problema:** Faltam algumas melhorias de UX
+**Solucao:**
+- Adicionar feedback haptico (vibracao) nos botoes
+- Som de confirmacao ao registrar ponto
+- Animacao de transicao entre telas
+- Indicador de progresso (etapas 1/4, 2/4, etc.)
+
+---
+
+### 7. Seguranca do Device Secret
+
+**Problema:** O device_secret esta hardcoded no codigo
+**Solucao:** 
+- Criar tela de configuracao inicial do tablet
+- Armazenar device_secret no localStorage
+- Permitir reset via codigo de administrador
+
+---
+
+### 8. Prevencao de Toques Acidentais
+
+**Problema:** Toques acidentais podem enviar o formulario
+**Solucao:**
+- Adicionar confirmacao antes de acoes criticas
+- Debounce nos botoes principais
+- Desabilitar double-tap zoom
+
+---
+
+## Implementacao Tecnica
+
+### Novos Componentes
 
 ```text
-+----------------+       +-------------------+       +-------------+
-|    sectors     | <---- | sector_schedules  |       |  employees  |
-+----------------+       +-------------------+       +-------------+
-| id (PK)        |       | id (PK)           |       | id (PK)     |
-| nome           |       | sector_id (FK)    |       | nome        |
-| ativo          |       | expected_start    |       | sector_id   | ---> sectors
-| created_at     |       | expected_end      |       | cargo       |
-+----------------+       | break_minutes     |       | ...         |
-                         | tolerance_early   |       +-------------+
-                         | tolerance_late    |
-                         | weekly_days       |
-                         +-------------------+
+src/components/kiosk/
+├── ConnectionStatus.tsx    (indicador de conexao)
+├── ProgressIndicator.tsx   (passos 1-4)
+├── InactivityTimeout.tsx   (hook para timeout)
+├── KioskErrorBoundary.tsx  (tratamento de erros)
+└── DeviceSetup.tsx         (configuracao inicial)
 ```
 
-## Mudancas no Banco de Dados
+### Hooks Novos
 
-### 1. Nova tabela `sectors`
-Armazena os setores/departamentos da empresa:
-
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid | Chave primaria |
-| nome | text | Nome do setor (ex: Producao, Administrativo) |
-| ativo | boolean | Se o setor esta ativo |
-| created_at | timestamp | Data de criacao |
-
-### 2. Nova tabela `sector_schedules`
-Define o horario padrao de cada setor:
-
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid | Chave primaria |
-| sector_id | uuid | FK para sectors |
-| expected_start | time | Horario de entrada (ex: 08:00) |
-| expected_end | time | Horario de saida (ex: 18:00) |
-| break_minutes | integer | Duracao do intervalo em minutos |
-| tolerance_early_minutes | integer | Tolerancia para chegada antecipada |
-| tolerance_late_minutes | integer | Tolerancia para atraso |
-| weekly_days | jsonb | Dias da semana trabalhados |
-| created_at | timestamp | Data de criacao |
-| updated_at | timestamp | Data de atualizacao |
-
-### 3. Alterar tabela `employees`
-Substituir o campo texto `setor` por referencia ao setor:
-
-- Adicionar coluna `sector_id` (uuid, FK para sectors)
-- Manter campo `setor` (texto) para compatibilidade temporaria
-
-## Mudancas na Interface
-
-### 1. Nova pagina `/admin/sectors`
-Gerenciamento de setores com:
-- Lista de setores cadastrados
-- Botao "Novo Setor"
-- Formulario para criar/editar setor:
-  - Nome do setor
-  - Horario de entrada
-  - Horario de saida
-  - Intervalo (minutos)
-  - Tolerancia (minutos)
-  - Dias da semana trabalhados (checkboxes)
-- Acoes: editar, ativar/desativar
-
-### 2. Atualizar pagina `/admin/employees`
-No formulario de colaborador:
-- Substituir campo texto "Setor" por dropdown/select
-- Listar setores ativos cadastrados
-- Ao selecionar setor, funcionario herda horario automaticamente
-
-### 3. Atualizar menu lateral (AdminLayout)
-Adicionar item "Setores" no menu com icone Building2
-
-## Logica de Heranca de Horario
-
-Quando o sistema precisar do horario de um funcionario (ex: ao bater ponto):
-
-1. Verificar se funcionario tem `work_schedule` individual
-2. Se nao, buscar horario do setor via `sector_id` -> `sector_schedules`
-3. Se nao, usar horario padrao (8h-18h, 60min intervalo)
-
-## Arquivos a Criar/Modificar
-
-| Arquivo | Acao |
-|---------|------|
-| `src/pages/admin/Sectors.tsx` | Criar - pagina de gestao de setores |
-| `src/pages/admin/Employees.tsx` | Modificar - dropdown de setor |
-| `src/components/admin/AdminLayout.tsx` | Modificar - adicionar menu Setores |
-| `src/App.tsx` | Modificar - adicionar rota /admin/sectors |
-| `supabase/functions/ponto-validate/index.ts` | Modificar - buscar horario do setor |
-
-## Detalhes Tecnicos
-
-### Migracao SQL
-```sql
--- Criar tabela sectors
-CREATE TABLE public.sectors (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  nome text NOT NULL,
-  ativo boolean DEFAULT true,
-  created_at timestamptz DEFAULT now()
-);
-
--- Criar tabela sector_schedules
-CREATE TABLE public.sector_schedules (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  sector_id uuid NOT NULL REFERENCES sectors(id) ON DELETE CASCADE,
-  expected_start time NOT NULL DEFAULT '08:00',
-  expected_end time NOT NULL DEFAULT '18:00',
-  break_minutes integer DEFAULT 60,
-  tolerance_early_minutes integer DEFAULT 10,
-  tolerance_late_minutes integer DEFAULT 10,
-  weekly_days jsonb DEFAULT '{"mon":true,"tue":true,"wed":true,"thu":true,"fri":true,"sat":false,"sun":false}',
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE(sector_id)
-);
-
--- Adicionar sector_id em employees
-ALTER TABLE public.employees ADD COLUMN sector_id uuid REFERENCES sectors(id);
-
--- RLS policies
-ALTER TABLE sectors ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sector_schedules ENABLE ROW LEVEL SECURITY;
-
--- Policies para Admin/RH
-CREATE POLICY "Admin/RH podem ver setores" ON sectors FOR SELECT USING (is_admin_or_rh(auth.uid()));
-CREATE POLICY "Admin/RH podem gerenciar setores" ON sectors FOR ALL USING (is_admin_or_rh(auth.uid()));
-CREATE POLICY "Admin/RH podem ver horarios setores" ON sector_schedules FOR SELECT USING (is_admin_or_rh(auth.uid()));
-CREATE POLICY "Admin/RH podem gerenciar horarios setores" ON sector_schedules FOR ALL USING (is_admin_or_rh(auth.uid()));
+```text
+src/hooks/
+├── useInactivityTimeout.ts  (reset apos inatividade)
+├── useOnlineStatus.ts       (detectar offline)
+└── useHapticFeedback.ts     (vibracao)
 ```
 
-### Componente Sectors.tsx
-- Usar mesma estrutura de Employees.tsx (Table, Dialog, Form)
-- Icone: Building2 do lucide-react
-- Campos do formulario:
-  - Nome do setor (obrigatorio)
-  - Horario entrada (time input)
-  - Horario saida (time input)
-  - Intervalo (number input)
-  - Tolerancia (number input)
-  - Dias da semana (checkboxes para seg-dom)
+### Alteracoes na Edge Function
 
-### Dropdown de Setor em Employees
-```tsx
-<Select value={formData.sector_id} onValueChange={(v) => setFormData({...formData, sector_id: v})}>
-  <SelectTrigger>
-    <SelectValue placeholder="Selecione o setor" />
-  </SelectTrigger>
-  <SelectContent>
-    {sectors.map(s => (
-      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-    ))}
-  </SelectContent>
-</Select>
-```
+- Adicionar log mais detalhado para debug
+- Retornar mensagens de erro mais especificas
 
-### Atualizacao do ponto-validate
-Na funcao `recalculateTimesheet`, modificar a busca de horario:
+---
 
-```typescript
-// 1. Tentar horario individual
-let schedule = await supabase.from('work_schedules').select(...).eq('employee_id', employeeId);
+## Ordem de Implementacao
 
-// 2. Se nao existir, buscar do setor
-if (!schedule) {
-  const { data: emp } = await supabase.from('employees').select('sector_id').eq('id', employeeId);
-  if (emp?.sector_id) {
-    schedule = await supabase.from('sector_schedules').select(...).eq('sector_id', emp.sector_id);
-  }
-}
+1. **Prioridade Alta (Estabilidade)**
+   - Timeout de inatividade com reset automatico
+   - Melhorar tratamento da camera (retry, erros especificos)
+   - Substituir alerts por toasts/mensagens inline
+   - Adicionar loading durante validacao do PIN
 
-// 3. Usar padrao se nenhum encontrado
-if (!schedule) {
-  schedule = { expected_start: '08:00', expected_end: '18:00', break_minutes: 60 };
-}
-```
+2. **Prioridade Media (UX)**
+   - Indicador de progresso (etapas)
+   - Detector de conexao offline
+   - Feedback visual melhorado
 
-## Beneficios
-- Configuracao centralizada de horarios por departamento
-- Menos trabalho ao cadastrar funcionarios
-- Facilidade para alterar horario de todo um setor de uma vez
-- Flexibilidade: funcionarios podem ter horario individual se necessario
+3. **Prioridade Baixa (Extras)**
+   - Configuracao do device_secret
+   - Feedback haptico
+   - Sons de confirmacao
+
+---
+
+## Notas Tecnicas
+
+- O projeto usa React 18 com hooks
+- Tailwind CSS para estilos
+- Animacoes ja configuradas: `animate-scale-in`, `animate-fade-in-up`, `animate-pulse-success`
+- Edge function `ponto-validate` ja tem CORS configurado corretamente
+- Banco de dados possui colaboradores ativos e dispositivo configurado
+
