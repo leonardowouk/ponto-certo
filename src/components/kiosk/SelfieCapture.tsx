@@ -54,7 +54,17 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const isStartingRef = useRef(false);
+  const prevIsLoadingRef = useRef(isLoading);
   const { vibrate } = useHapticFeedback();
+
+  // Sync isSubmitting with isLoading - when isLoading goes from true to false, reset isSubmitting
+  useEffect(() => {
+    if (prevIsLoadingRef.current === true && isLoading === false) {
+      // Operation finished (either success or error), reset submitting state
+      setIsSubmitting(false);
+    }
+    prevIsLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
