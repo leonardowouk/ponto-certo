@@ -10,6 +10,12 @@ interface SelfieCaptureProps {
 
 type CameraError = 'NotAllowedError' | 'NotFoundError' | 'NotReadableError' | 'OverconstrainedError' | 'unknown';
 
+type CameraDebugInfo = {
+  lastErrorName?: string;
+  lastErrorMessage?: string;
+  lastConstraintLabel?: string;
+};
+
 const errorMessages: Record<CameraError, { title: string; description: string }> = {
   NotAllowedError: {
     title: 'Permissão negada',
@@ -40,9 +46,11 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const [isStartingCamera, setIsStartingCamera] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [debugInfo, setDebugInfo] = useState<CameraDebugInfo>({});
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isStartingRef = useRef(false);
   const { vibrate } = useHapticFeedback();
 
   const stopCamera = useCallback(() => {
@@ -56,30 +64,91 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       stream.getTracks().forEach(track => track.stop());
     }
     setStream(null);
+    setCameraReady(false);
   }, [stream]);
 
   const startCamera = useCallback(async () => {
+    if (isStartingRef.current) return;
+    isStartingRef.current = true;
+
     setIsStartingCamera(true);
     setError(null);
+    setDebugInfo({});
 
     // Limpar stream anterior
     stopCamera();
 
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'user', 
-          width: { ideal: 640 }, 
-          height: { ideal: 480 } 
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setDebugInfo({ lastErrorName: 'NotSupportedError', lastErrorMessage: 'mediaDevices.getUserMedia não disponível' });
+        setError('unknown');
+        return;
+      }
+
+      // Alguns devices/navegadores (incluindo variações no Android/Samsung) rejeitam constraints específicas.
+      // Tentamos uma sequência de constraints (do mais específico ao mais permissivo).
+      const attempts: Array<{ label: string; constraints: MediaStreamConstraints }> = [
+        {
+          label: 'user + 640x480 (ideal)',
+          constraints: {
+            video: {
+              facingMode: { ideal: 'user' },
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+            },
+            audio: false,
+          },
         },
-        audio: false,
-      });
+        {
+          label: 'user (ideal)',
+          constraints: {
+            video: { facingMode: { ideal: 'user' } },
+            audio: false,
+          },
+        },
+        {
+          label: 'video: true (fallback)',
+          constraints: {
+            video: true,
+            audio: false,
+          },
+        },
+      ];
+
+      let mediaStream: MediaStream | null = null;
+      let lastErr: unknown = null;
+
+      for (const attempt of attempts) {
+        try {
+          setDebugInfo(prev => ({ ...prev, lastConstraintLabel: attempt.label }));
+          mediaStream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+          break;
+        } catch (e) {
+          lastErr = e;
+          // Se for overconstrained, tenta o próximo. Para outros erros, não adianta insistir.
+          const name = e instanceof Error ? e.name : '';
+          if (name !== 'OverconstrainedError') {
+            throw e;
+          }
+        }
+      }
+
+      if (!mediaStream) {
+        throw lastErr ?? new Error('Falha ao obter MediaStream');
+      }
       
       streamRef.current = mediaStream;
       setStream(mediaStream);
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+
+        // Em alguns Androids, autoPlay pode não iniciar imediatamente; tentamos dar play.
+        try {
+          await videoRef.current.play();
+        } catch {
+          // Ignorar — o autoplay/muted pode iniciar sozinho.
+        }
       }
       
       setError(null);
@@ -90,6 +159,12 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       
       let errorType: CameraError = 'unknown';
       if (err instanceof Error) {
+        setDebugInfo(prev => ({
+          ...prev,
+          lastErrorName: err.name,
+          lastErrorMessage: err.message,
+        }));
+
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           errorType = 'NotAllowedError';
         } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
@@ -99,6 +174,11 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
         } else if (err.name === 'OverconstrainedError') {
           errorType = 'OverconstrainedError';
         }
+      } else {
+        setDebugInfo(prev => ({
+          ...prev,
+          lastErrorName: typeof err,
+        }));
       }
       
       setError(errorType);
@@ -112,6 +192,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       }
     } finally {
       setIsStartingCamera(false);
+      isStartingRef.current = false;
     }
   }, [retryCount, stopCamera]);
 
@@ -199,6 +280,8 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
               Toque no botão abaixo para ativar a câmera
             </p>
             <Button
+              type="button"
+              onPointerDown={handleStartCamera}
               onClick={handleStartCamera}
               className="h-14 px-8 text-lg rounded-xl kiosk-button"
             >
@@ -222,6 +305,22 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
             <p className="text-muted-foreground text-sm mb-4">
               {errorMessages[error].description}
             </p>
+
+            {(debugInfo.lastErrorName || debugInfo.lastConstraintLabel) && (
+              <div className="mb-4 w-full max-w-sm rounded-xl bg-muted/50 p-3 text-left">
+                <p className="text-xs font-medium text-foreground">Detalhes (debug)</p>
+                {debugInfo.lastConstraintLabel && (
+                  <p className="text-xs text-muted-foreground">Constraints: {debugInfo.lastConstraintLabel}</p>
+                )}
+                {debugInfo.lastErrorName && (
+                  <p className="text-xs text-muted-foreground">Erro: {debugInfo.lastErrorName}</p>
+                )}
+                {debugInfo.lastErrorMessage && (
+                  <p className="text-xs text-muted-foreground break-words">Msg: {debugInfo.lastErrorMessage}</p>
+                )}
+              </div>
+            )}
+
             <Button
               onClick={handleRetryCamera}
               variant="outline"
