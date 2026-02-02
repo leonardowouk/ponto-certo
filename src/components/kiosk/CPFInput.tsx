@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { formatCPF, validateCPF } from '@/lib/hash';
 import { Button } from '@/components/ui/button';
 import { User, ArrowRight, AlertCircle, Delete } from 'lucide-react';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 
 interface CPFInputProps {
   onSubmit: (cpf: string) => void;
@@ -11,12 +12,15 @@ export function CPFInput({ onSubmit }: CPFInputProps) {
   const [cpf, setCPF] = useState('');
   const [error, setError] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const { vibrate } = useHapticFeedback();
 
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
 
-  const handleKeyPress = (key: string) => {
+  const handleKeyPress = useCallback((key: string) => {
+    vibrate('light');
+    
     if (key === 'delete') {
       const numbers = cpf.replace(/\D/g, '');
       const newNumbers = numbers.slice(0, -1);
@@ -30,15 +34,17 @@ export function CPFInput({ onSubmit }: CPFInputProps) {
       }
     }
     setError('');
-  };
+  }, [cpf, vibrate]);
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (!validateCPF(cpf)) {
       setError('CPF inválido');
+      vibrate('error');
       return;
     }
+    vibrate('medium');
     onSubmit(cpf);
-  };
+  }, [cpf, onSubmit, vibrate]);
 
   // Handle keyboard input
   useEffect(() => {
@@ -57,7 +63,7 @@ export function CPFInput({ onSubmit }: CPFInputProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [cpf]);
+  }, [cpf, handleKeyPress, handleSubmit]);
 
   const isValid = cpf.replace(/\D/g, '').length === 11;
 
