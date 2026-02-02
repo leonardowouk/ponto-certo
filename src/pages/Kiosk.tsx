@@ -23,6 +23,7 @@ interface EmployeeData {
 interface PunchResult {
   punchType: string;
   punchTime: Date;
+  selfieImage: string;
 }
 
 // Para demo, usamos um device_secret fixo. Em produção, seria configurado no tablet.
@@ -178,6 +179,7 @@ export default function KioskPage() {
       setPunchResult({
         punchType: data.punch_type,
         punchTime: new Date(data.punched_at),
+        selfieImage: imageData,
       });
       setStep('success');
     } catch (err) {
@@ -272,6 +274,7 @@ export default function KioskPage() {
           employeeName={employee.nome}
           punchType={punchResult.punchType}
           punchTime={punchResult.punchTime}
+          selfieImage={punchResult.selfieImage}
           onReset={handleReset}
         />
       )}
