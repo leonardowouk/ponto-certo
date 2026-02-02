@@ -1,22 +1,37 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Lock, ArrowLeft, ArrowRight, Delete, AlertCircle } from 'lucide-react';
+import { Lock, ArrowLeft, ArrowRight, Delete, AlertCircle, Loader2 } from 'lucide-react';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 
 interface PINInputProps {
   onSubmit: (pin: string) => void;
   onBack: () => void;
   error?: string;
+  isLoading?: boolean;
 }
 
-export function PINInput({ onSubmit, onBack, error }: PINInputProps) {
+export function PINInput({ onSubmit, onBack, error, isLoading }: PINInputProps) {
   const [pin, setPin] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const { vibrate } = useHapticFeedback();
 
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
 
-  const handleKeyPress = (key: string) => {
+  // Reset PIN when error changes (new error = wrong PIN)
+  useEffect(() => {
+    if (error) {
+      setPin('');
+      vibrate('error');
+    }
+  }, [error, vibrate]);
+
+  const handleKeyPress = useCallback((key: string) => {
+    if (isLoading) return;
+    
+    vibrate('light');
+    
     if (key === 'delete') {
       setPin(prev => prev.slice(0, -1));
     } else if (key === 'clear') {
@@ -24,17 +39,20 @@ export function PINInput({ onSubmit, onBack, error }: PINInputProps) {
     } else if (pin.length < 6) {
       setPin(prev => prev + key);
     }
-  };
+  }, [isLoading, pin.length, vibrate]);
 
-  const handleSubmit = () => {
-    if (pin.length === 6) {
+  const handleSubmit = useCallback(() => {
+    if (pin.length === 6 && !isLoading) {
+      vibrate('medium');
       onSubmit(pin);
     }
-  };
+  }, [pin, isLoading, onSubmit, vibrate]);
 
   // Handle keyboard input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isLoading) return;
+      
       if (e.key >= '0' && e.key <= '9') {
         handleKeyPress(e.key);
       } else if (e.key === 'Backspace') {
@@ -46,7 +64,7 @@ export function PINInput({ onSubmit, onBack, error }: PINInputProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pin]);
+  }, [pin, isLoading, handleKeyPress, handleSubmit]);
 
   const keypadNumbers = [
     ['1', '2', '3'],
@@ -106,7 +124,8 @@ export function PINInput({ onSubmit, onBack, error }: PINInputProps) {
               <button
                 key={key}
                 onClick={() => handleKeyPress(key)}
-                className="keypad-button flex items-center justify-center"
+                disabled={isLoading}
+                className="keypad-button flex items-center justify-center disabled:opacity-50"
               >
                 {key === 'delete' ? (
                   <Delete className="w-6 h-6 text-muted-foreground" />
@@ -127,6 +146,7 @@ export function PINInput({ onSubmit, onBack, error }: PINInputProps) {
           type="button"
           variant="outline"
           onClick={onBack}
+          disabled={isLoading}
           className="flex-1 h-14 text-lg rounded-xl"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
@@ -134,12 +154,21 @@ export function PINInput({ onSubmit, onBack, error }: PINInputProps) {
         </Button>
         <Button
           type="button"
-          disabled={pin.length !== 6}
+          disabled={pin.length !== 6 || isLoading}
           onClick={handleSubmit}
           className="flex-1 h-14 text-lg rounded-xl kiosk-button"
         >
-          Confirmar
-          <ArrowRight className="w-5 h-5 ml-2" />
+          {isLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+              Validando...
+            </>
+          ) : (
+            <>
+              Confirmar
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </>
+          )}
         </Button>
       </div>
     </div>

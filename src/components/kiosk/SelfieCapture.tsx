@@ -1,53 +1,131 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Camera, RotateCcw, Check, Loader2 } from 'lucide-react';
+import { Camera, RotateCcw, Check, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { useHapticFeedback } from '@/hooks/useHapticFeedback';
 
 interface SelfieCaptureProps {
   onCapture: (imageData: string) => void;
   isLoading?: boolean;
 }
 
+type CameraError = 'NotAllowedError' | 'NotFoundError' | 'NotReadableError' | 'OverconstrainedError' | 'unknown';
+
+const errorMessages: Record<CameraError, { title: string; description: string }> = {
+  NotAllowedError: {
+    title: 'Permissão negada',
+    description: 'Permita o acesso à câmera nas configurações do navegador.',
+  },
+  NotFoundError: {
+    title: 'Câmera não encontrada',
+    description: 'Nenhuma câmera foi detectada neste dispositivo.',
+  },
+  NotReadableError: {
+    title: 'Câmera em uso',
+    description: 'A câmera pode estar sendo usada por outro aplicativo.',
+  },
+  OverconstrainedError: {
+    title: 'Configuração inválida',
+    description: 'A câmera não suporta as configurações solicitadas.',
+  },
+  unknown: {
+    title: 'Erro na câmera',
+    description: 'Não foi possível acessar a câmera. Tente novamente.',
+  },
+};
+
 export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<CameraError | null>(null);
+  const [isStartingCamera, setIsStartingCamera] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const { vibrate } = useHapticFeedback();
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+      });
+      streamRef.current = null;
+    }
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setStream(null);
+  }, [stream]);
 
   const startCamera = useCallback(async () => {
+    setIsStartingCamera(true);
+    setError(null);
+
+    // Limpar stream anterior
+    stopCamera();
+
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
+        video: { 
+          facingMode: 'user', 
+          width: { ideal: 640 }, 
+          height: { ideal: 480 } 
+        },
         audio: false,
       });
+      
+      streamRef.current = mediaStream;
       setStream(mediaStream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
-      setError('');
+      
+      setError(null);
+      setRetryCount(0);
     } catch (err) {
-      setError('Não foi possível acessar a câmera. Verifique as permissões.');
       console.error('Camera error:', err);
+      
+      let errorType: CameraError = 'unknown';
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          errorType = 'NotAllowedError';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          errorType = 'NotFoundError';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          errorType = 'NotReadableError';
+        } else if (err.name === 'OverconstrainedError') {
+          errorType = 'OverconstrainedError';
+        }
+      }
+      
+      setError(errorType);
+      
+      // Auto-retry para erros temporários (até 3 vezes)
+      if (errorType === 'NotReadableError' && retryCount < 3) {
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          startCamera();
+        }, 1500);
+      }
+    } finally {
+      setIsStartingCamera(false);
     }
-  }, []);
+  }, [retryCount, stopCamera]);
 
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  }, [stream]);
-
+  // Iniciar câmera ao montar
   useEffect(() => {
     startCamera();
+    
+    // Cleanup ao desmontar
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
-  const capturePhoto = () => {
+  const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -66,19 +144,28 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
     const imageData = canvas.toDataURL('image/jpeg', 0.8);
     setCapturedImage(imageData);
+    vibrate('medium');
     stopCamera();
-  };
+  }, [stopCamera, vibrate]);
 
-  const retakePhoto = () => {
+  const retakePhoto = useCallback(() => {
     setCapturedImage(null);
+    vibrate('light');
     startCamera();
-  };
+  }, [startCamera, vibrate]);
 
-  const confirmPhoto = () => {
+  const confirmPhoto = useCallback(() => {
     if (capturedImage) {
+      vibrate('success');
       onCapture(capturedImage);
     }
-  };
+  }, [capturedImage, onCapture, vibrate]);
+
+  const handleRetryCamera = useCallback(() => {
+    vibrate('light');
+    setRetryCount(0);
+    startCamera();
+  }, [startCamera, vibrate]);
 
   return (
     <div className="bg-card rounded-3xl p-8 card-elevated-lg animate-scale-in">
@@ -96,9 +183,30 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
       {/* Camera view */}
       <div className="relative aspect-[4/3] bg-muted rounded-2xl overflow-hidden mb-6">
-        {error ? (
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <p className="text-destructive text-center">{error}</p>
+        {isStartingCamera && !error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            <p className="text-muted-foreground text-sm">Iniciando câmera...</p>
+          </div>
+        ) : error ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <AlertCircle className="w-8 h-8 text-destructive" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              {errorMessages[error].title}
+            </h3>
+            <p className="text-muted-foreground text-sm mb-4">
+              {errorMessages[error].description}
+            </p>
+            <Button
+              onClick={handleRetryCamera}
+              variant="outline"
+              className="gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Tentar novamente
+            </Button>
           </div>
         ) : capturedImage ? (
           <img 
@@ -118,7 +226,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
         )}
         
         {/* Overlay guide */}
-        {!capturedImage && !error && (
+        {!capturedImage && !error && !isStartingCamera && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-48 h-56 border-4 border-dashed border-primary/50 rounded-full" />
@@ -160,7 +268,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
         <Button
           type="button"
           onClick={capturePhoto}
-          disabled={!!error}
+          disabled={!!error || isStartingCamera}
           className="w-full h-16 text-xl font-semibold rounded-2xl kiosk-button"
         >
           <Camera className="w-6 h-6 mr-2" />

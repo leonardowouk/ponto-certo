@@ -1,12 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { KioskLayout } from '@/components/kiosk/KioskLayout';
 import { CPFInput } from '@/components/kiosk/CPFInput';
 import { PINInput } from '@/components/kiosk/PINInput';
 import { ConfirmIdentity } from '@/components/kiosk/ConfirmIdentity';
 import { SelfieCapture } from '@/components/kiosk/SelfieCapture';
 import { PunchSuccess } from '@/components/kiosk/PunchSuccess';
+import { ProgressIndicator } from '@/components/kiosk/ProgressIndicator';
 import { supabase } from '@/integrations/supabase/client';
 import { hashCPF } from '@/lib/hash';
+import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { useToast } from '@/hooks/use-toast';
 
 type Step = 'cpf' | 'pin' | 'confirm' | 'selfie' | 'success';
 
@@ -24,6 +28,15 @@ interface PunchResult {
 // Para demo, usamos um device_secret fixo. Em produção, seria configurado no tablet.
 const DEVICE_SECRET = 'demo-device-secret-123';
 const UNIDADE = 'Matriz';
+const INACTIVITY_TIMEOUT = 60000; // 60 segundos
+
+const stepToNumber: Record<Step, number> = {
+  cpf: 1,
+  pin: 2,
+  confirm: 3,
+  selfie: 4,
+  success: 5,
+};
 
 export default function KioskPage() {
   const [step, setStep] = useState<Step>('cpf');
@@ -32,13 +45,56 @@ export default function KioskPage() {
   const [punchResult, setPunchResult] = useState<PunchResult | null>(null);
   const [pinError, setPinError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  const { isOnline } = useOnlineStatus();
+
+  const handleReset = useCallback(() => {
+    setStep('cpf');
+    setCPF('');
+    setEmployee(null);
+    setPunchResult(null);
+    setPinError('');
+    setIsLoading(false);
+  }, []);
+
+  // Inactivity timeout - reset after 60 seconds of no activity
+  useInactivityTimeout({
+    timeout: INACTIVITY_TIMEOUT,
+    onTimeout: () => {
+      if (step !== 'cpf' && step !== 'success') {
+        toast({
+          title: 'Sessão expirada',
+          description: 'Reiniciando por inatividade...',
+          variant: 'destructive',
+        });
+        handleReset();
+      }
+    },
+    enabled: step !== 'cpf' && step !== 'success',
+  });
+
+  // Check online status before actions
+  const checkOnline = useCallback(() => {
+    if (!isOnline) {
+      toast({
+        title: 'Sem conexão',
+        description: 'Verifique sua conexão com a internet.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    return true;
+  }, [isOnline, toast]);
 
   const handleCPFSubmit = async (submittedCPF: string) => {
+    if (!checkOnline()) return;
     setCPF(submittedCPF);
     setStep('pin');
   };
 
   const handlePINSubmit = async (pin: string) => {
+    if (!checkOnline()) return;
+    
     setIsLoading(true);
     setPinError('');
 
@@ -56,6 +112,7 @@ export default function KioskPage() {
       });
 
       if (error) {
+        console.error('Validation error:', error);
         setPinError('Erro ao validar. Tente novamente.');
         return;
       }
@@ -81,6 +138,7 @@ export default function KioskPage() {
 
   const handleSelfieCapture = async (imageData: string) => {
     if (!employee) return;
+    if (!checkOnline()) return;
 
     setIsLoading(true);
 
@@ -100,12 +158,20 @@ export default function KioskPage() {
 
       if (error) {
         console.error('Punch error:', error);
-        alert('Erro ao registrar ponto. Tente novamente.');
+        toast({
+          title: 'Erro ao registrar ponto',
+          description: 'Tente novamente.',
+          variant: 'destructive',
+        });
         return;
       }
 
       if (!data.success) {
-        alert(data.message || 'Erro ao registrar ponto');
+        toast({
+          title: 'Erro',
+          description: data.message || 'Erro ao registrar ponto',
+          variant: 'destructive',
+        });
         return;
       }
 
@@ -116,19 +182,15 @@ export default function KioskPage() {
       setStep('success');
     } catch (err) {
       console.error('Punch error:', err);
-      alert('Erro de conexão. Tente novamente.');
+      toast({
+        title: 'Erro de conexão',
+        description: 'Verifique sua internet e tente novamente.',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleReset = useCallback(() => {
-    setStep('cpf');
-    setCPF('');
-    setEmployee(null);
-    setPunchResult(null);
-    setPinError('');
-  }, []);
 
   const handleBack = () => {
     if (step === 'pin') {
@@ -139,8 +201,43 @@ export default function KioskPage() {
     }
   };
 
+  // Disable double-tap zoom on the kiosk page
+  useEffect(() => {
+    const preventZoom = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+
+    let lastTap = 0;
+    const preventDoubleTap = (e: TouchEvent) => {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        e.preventDefault();
+      }
+      lastTap = now;
+    };
+
+    document.addEventListener('touchstart', preventZoom, { passive: false });
+    document.addEventListener('touchend', preventDoubleTap, { passive: false });
+
+    return () => {
+      document.removeEventListener('touchstart', preventZoom);
+      document.removeEventListener('touchend', preventDoubleTap);
+    };
+  }, []);
+
+  const currentStepNumber = stepToNumber[step];
+  const showProgress = step !== 'success';
+
   return (
     <KioskLayout>
+      {showProgress && (
+        <div className="mb-4">
+          <ProgressIndicator currentStep={currentStepNumber} totalSteps={4} />
+        </div>
+      )}
+
       {step === 'cpf' && (
         <CPFInput onSubmit={handleCPFSubmit} />
       )}
@@ -150,6 +247,7 @@ export default function KioskPage() {
           onSubmit={handlePINSubmit} 
           onBack={handleBack}
           error={pinError}
+          isLoading={isLoading}
         />
       )}
 
