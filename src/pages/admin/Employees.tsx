@@ -31,6 +31,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, UserX, UserCheck, Loader2, Search } from 'lucide-react';
 import { hashCPF, formatCPF, validateCPF } from '@/lib/hash';
+import { Switch } from '@/components/ui/switch';
 
 interface Sector {
   id: string;
@@ -67,6 +68,9 @@ export default function EmployeesPage() {
     cargo: '',
     sector_id: '',
     data_admissao: '',
+    hasAdminAccess: false,
+    email: '',
+    password: '',
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -120,6 +124,9 @@ export default function EmployeesPage() {
         cargo: employee.cargo || '',
         sector_id: employee.sector_id || '',
         data_admissao: employee.data_admissao || '',
+        hasAdminAccess: false,
+        email: '',
+        password: '',
       });
     } else {
       setEditingEmployee(null);
@@ -130,6 +137,9 @@ export default function EmployeesPage() {
         cargo: '',
         sector_id: '',
         data_admissao: '',
+        hasAdminAccess: false,
+        email: '',
+        password: '',
       });
     }
     setIsDialogOpen(true);
@@ -182,6 +192,20 @@ export default function EmployeesPage() {
           return;
         }
 
+        // Validar campos de acesso admin
+        if (formData.hasAdminAccess) {
+          if (!formData.email || !formData.email.includes('@')) {
+            toast({ title: 'Erro', description: 'E-mail inválido para acesso administrativo', variant: 'destructive' });
+            setFormLoading(false);
+            return;
+          }
+          if (!formData.password || formData.password.length < 6) {
+            toast({ title: 'Erro', description: 'Senha deve ter pelo menos 6 caracteres', variant: 'destructive' });
+            setFormLoading(false);
+            return;
+          }
+        }
+
         // Hash CPF e PIN
         const cpfHash = await hashCPF(formData.cpf);
         
@@ -196,7 +220,27 @@ export default function EmployeesPage() {
           return;
         }
 
-        const { error } = await supabase
+        // Se tem acesso admin, criar usuário Auth primeiro
+        let authUserId: string | null = null;
+        if (formData.hasAdminAccess) {
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: formData.email,
+            password: formData.password,
+            options: {
+              emailRedirectTo: `${window.location.origin}/`,
+            },
+          });
+
+          if (authError) {
+            toast({ title: 'Erro', description: `Erro ao criar usuário: ${authError.message}`, variant: 'destructive' });
+            setFormLoading(false);
+            return;
+          }
+
+          authUserId = authData.user?.id || null;
+        }
+
+        const { data: empData, error } = await supabase
           .from('employees')
           .insert({
             nome: formData.nome,
@@ -205,7 +249,10 @@ export default function EmployeesPage() {
             cargo: formData.cargo || null,
             sector_id: formData.sector_id || null,
             data_admissao: formData.data_admissao || null,
-          });
+            email: formData.hasAdminAccess ? formData.email : null,
+          })
+          .select('id')
+          .single();
 
         if (error) {
           if (error.message.includes('duplicate')) {
@@ -217,7 +264,26 @@ export default function EmployeesPage() {
           return;
         }
 
-        toast({ title: 'Sucesso', description: 'Colaborador cadastrado' });
+        // Se tem acesso admin, adicionar role
+        if (authUserId && formData.hasAdminAccess) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: authUserId,
+              role: 'admin',
+            });
+
+          if (roleError) {
+            console.error('Erro ao adicionar role:', roleError);
+            toast({ 
+              title: 'Aviso', 
+              description: 'Colaborador cadastrado, mas erro ao definir permissão admin. Verifique manualmente.',
+              variant: 'destructive' 
+            });
+          }
+        }
+
+        toast({ title: 'Sucesso', description: formData.hasAdminAccess ? 'Colaborador cadastrado com acesso admin' : 'Colaborador cadastrado' });
       }
 
       setIsDialogOpen(false);
@@ -362,6 +428,52 @@ export default function EmployeesPage() {
                     onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
                   />
                 </div>
+
+                {/* Acesso Administrativo */}
+                {!editingEmployee && (
+                  <div className="space-y-4 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="hasAdminAccess">Acesso ao Painel Administrativo</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Permite login no painel de gestão
+                        </p>
+                      </div>
+                      <Switch
+                        id="hasAdminAccess"
+                        checked={formData.hasAdminAccess}
+                        onCheckedChange={(checked) => setFormData({ ...formData, hasAdminAccess: checked })}
+                      />
+                    </div>
+
+                    {formData.hasAdminAccess && (
+                      <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+                        <div className="space-y-2">
+                          <Label htmlFor="email">E-mail de acesso *</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            placeholder="email@empresa.com"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="password">Senha *</Label>
+                          <Input
+                            id="password"
+                            type="password"
+                            value={formData.password}
+                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                            placeholder="Mínimo 6 caracteres"
+                            required
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <Button
