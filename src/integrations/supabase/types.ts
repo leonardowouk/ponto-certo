@@ -22,6 +22,7 @@ export type Database = {
           cpf_hash: string
           created_at: string | null
           data_admissao: string | null
+          email: string | null
           failed_attempts: number | null
           foto_cadastro_url: string | null
           id: string
@@ -39,6 +40,7 @@ export type Database = {
           cpf_hash: string
           created_at?: string | null
           data_admissao?: string | null
+          email?: string | null
           failed_attempts?: number | null
           foto_cadastro_url?: string | null
           id?: string
@@ -56,6 +58,7 @@ export type Database = {
           cpf_hash?: string
           created_at?: string | null
           data_admissao?: string | null
+          email?: string | null
           failed_attempts?: number | null
           foto_cadastro_url?: string | null
           id?: string
