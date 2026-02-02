@@ -37,7 +37,8 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<CameraError | null>(null);
-  const [isStartingCamera, setIsStartingCamera] = useState(true);
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,6 +84,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
       
       setError(null);
       setRetryCount(0);
+      setCameraReady(true);
     } catch (err) {
       console.error('Camera error:', err);
       
@@ -113,17 +115,20 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
     }
   }, [retryCount, stopCamera]);
 
-  // Iniciar câmera ao montar
+  // Cleanup ao desmontar - NÃO iniciar automaticamente (requer gesto do usuário em mobile)
   useEffect(() => {
-    startCamera();
-    
-    // Cleanup ao desmontar
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
+
+  // Handler para iniciar câmera via gesto do usuário (obrigatório em mobile)
+  const handleStartCamera = useCallback(() => {
+    vibrate('light');
+    startCamera();
+  }, [startCamera, vibrate]);
 
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -150,6 +155,7 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
   const retakePhoto = useCallback(() => {
     setCapturedImage(null);
+    setCameraReady(false);
     vibrate('light');
     startCamera();
   }, [startCamera, vibrate]);
@@ -183,7 +189,24 @@ export function SelfieCapture({ onCapture, isLoading }: SelfieCaptureProps) {
 
       {/* Camera view */}
       <div className="relative aspect-[4/3] bg-muted rounded-2xl overflow-hidden mb-6">
-        {isStartingCamera && !error ? (
+        {!cameraReady && !error && !isStartingCamera ? (
+          // Tela inicial - botão para iniciar câmera (obrigatório em mobile)
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+              <Camera className="w-10 h-10 text-primary" />
+            </div>
+            <p className="text-muted-foreground text-sm text-center">
+              Toque no botão abaixo para ativar a câmera
+            </p>
+            <Button
+              onClick={handleStartCamera}
+              className="h-14 px-8 text-lg rounded-xl kiosk-button"
+            >
+              <Camera className="w-5 h-5 mr-2" />
+              Ativar Câmera
+            </Button>
+          </div>
+        ) : isStartingCamera && !error ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
             <Loader2 className="w-10 h-10 text-primary animate-spin" />
             <p className="text-muted-foreground text-sm">Iniciando câmera...</p>
