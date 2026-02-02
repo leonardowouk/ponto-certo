@@ -190,8 +190,15 @@
     box-shadow: 0 1px 2px hsl(var(--foreground) / 0.08);
   }
 
-  /* Larger touch target on tablets */
-  @media (min-width: 768px) {
+  /* Optimized for Samsung Galaxy Tab A9 (1340x800) */
+  @media (min-width: 768px) and (max-width: 1400px) {
+    .keypad-button {
+      @apply w-16 h-16 text-xl;
+    }
+  }
+
+  /* Larger screens */
+  @media (min-width: 1400px) {
     .keypad-button {
       @apply w-24 h-24 text-3xl;
     }
