@@ -1,17 +1,21 @@
 import { Button } from '@/components/ui/button';
-import { Check, ArrowLeft, User } from 'lucide-react';
+import { Check, ArrowLeft, User, Settings } from 'lucide-react';
 
 interface ConfirmIdentityProps {
   employeeName: string;
   employeePhoto?: string;
+  isAdmin?: boolean;
   onConfirm: () => void;
+  onAdminAccess?: () => void;
   onBack: () => void;
 }
 
 export function ConfirmIdentity({ 
   employeeName, 
   employeePhoto, 
+  isAdmin,
   onConfirm, 
+  onAdminAccess,
   onBack 
 }: ConfirmIdentityProps) {
   return (
@@ -42,24 +46,38 @@ export function ConfirmIdentity({
         </h2>
       </div>
 
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onBack}
-          className="flex-1 h-14 text-lg rounded-xl"
-        >
-          <ArrowLeft className="w-5 h-5 mr-2" />
-          Não sou eu
-        </Button>
-        <Button
-          type="button"
-          onClick={onConfirm}
-          className="flex-1 h-14 text-lg rounded-xl kiosk-button gradient-primary border-0"
-        >
-          <Check className="w-5 h-5 mr-2" />
-          Confirmar
-        </Button>
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onBack}
+            className="flex-1 h-14 text-lg rounded-xl"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Não sou eu
+          </Button>
+          <Button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 h-14 text-lg rounded-xl kiosk-button gradient-primary border-0"
+          >
+            <Check className="w-5 h-5 mr-2" />
+            Bater Ponto
+          </Button>
+        </div>
+
+        {isAdmin && onAdminAccess && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onAdminAccess}
+            className="w-full h-14 text-lg rounded-xl"
+          >
+            <Settings className="w-5 h-5 mr-2" />
+            Acessar Painel Admin
+          </Button>
+        )}
       </div>
     </div>
   );
