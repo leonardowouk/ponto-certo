@@ -233,6 +233,21 @@ serve(async (req) => {
         success: true,
       });
 
+      // Check if employee has admin/rh role
+      let isAdmin = false;
+      if (employee.email) {
+        const { data: authUsers } = await supabase.auth.admin.listUsers();
+        const authUser = authUsers?.users?.find((u: { email?: string }) => u.email === employee.email);
+        if (authUser) {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', authUser.id)
+            .in('role', ['admin', 'rh']);
+          isAdmin = (roles && roles.length > 0) || false;
+        }
+      }
+
       return new Response(
         JSON.stringify({
           success: true,
@@ -241,6 +256,7 @@ serve(async (req) => {
             nome: employee.nome,
             foto_cadastro_url: employee.foto_cadastro_url,
           },
+          is_admin: isAdmin,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -358,6 +374,68 @@ serve(async (req) => {
           punch_type: punchType,
           punched_at: punchedAt,
           employee_name: employee.nome,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ACTION: ADMIN_LOGIN (gerar sessão admin sem bater ponto)
+    if (action === 'admin_login') {
+      if (!employee.email) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Colaborador sem email cadastrado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Verify admin role
+      const { data: authUsers } = await supabase.auth.admin.listUsers();
+      const authUser = authUsers?.users?.find((u: { email?: string }) => u.email === employee.email);
+      if (!authUser) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Usuário admin não encontrado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', authUser.id)
+        .in('role', ['admin', 'rh']);
+
+      if (!roles || roles.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Sem permissão de administrador' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Generate magic link for admin login
+      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: employee.email,
+      });
+
+      if (linkError || !linkData) {
+        console.error('[ponto-validate] Magic link error:', linkError);
+        return new Response(
+          JSON.stringify({ success: false, message: 'Erro ao gerar acesso admin' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      // Extract token from the link
+      const url = new URL(linkData.properties.action_link);
+      const token = url.searchParams.get('token');
+      const type = url.searchParams.get('type');
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          admin_token: token,
+          token_type: type,
+          email: employee.email,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

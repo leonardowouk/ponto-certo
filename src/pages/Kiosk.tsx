@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { KioskLayout } from '@/components/kiosk/KioskLayout';
 import { CPFInput } from '@/components/kiosk/CPFInput';
 import { PINInput } from '@/components/kiosk/PINInput';
@@ -11,6 +12,7 @@ import { hashCPF } from '@/lib/hash';
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
 type Step = 'cpf' | 'pin' | 'confirm' | 'selfie' | 'success';
 
@@ -47,8 +49,10 @@ export default function KioskPage() {
   const [pinError, setPinError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selfieSessionId, setSelfieSessionId] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
+  const navigate = useNavigate();
 
   const handleReset = useCallback(() => {
     setStep('cpf');
@@ -58,6 +62,7 @@ export default function KioskPage() {
     setPinError('');
     setIsLoading(false);
     setSelfieSessionId(0);
+    setIsAdmin(false);
   }, []);
 
   // Inactivity timeout - reset after 60 seconds of no activity
@@ -126,10 +131,64 @@ export default function KioskPage() {
       }
 
       setEmployee(data.employee);
+      setIsAdmin(data.is_admin || false);
       setStep('confirm');
     } catch (err) {
       console.error('Validation error:', err);
       setPinError('Erro de conexão. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAdminAccess = async () => {
+    if (!employee) return;
+    if (!checkOnline()) return;
+
+    setIsLoading(true);
+    try {
+      const cpfHash = await hashCPF(cpf);
+      const { data, error } = await supabase.functions.invoke('ponto-validate', {
+        body: {
+          cpf_hash: cpfHash,
+          device_secret: DEVICE_SECRET,
+          action: 'admin_login',
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({
+          title: 'Erro',
+          description: data?.message || 'Não foi possível acessar o painel admin',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Use the magic link token to sign in
+      const { error: authError } = await supabase.auth.verifyOtp({
+        token_hash: data.admin_token,
+        type: 'magiclink',
+      });
+
+      if (authError) {
+        console.error('Admin auth error:', authError);
+        toast({
+          title: 'Erro de autenticação',
+          description: 'Não foi possível autenticar. Tente novamente.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      navigate('/admin');
+    } catch (err) {
+      console.error('Admin access error:', err);
+      toast({
+        title: 'Erro',
+        description: 'Erro de conexão. Tente novamente.',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -262,7 +321,9 @@ export default function KioskPage() {
         <ConfirmIdentity
           employeeName={employee.nome}
           employeePhoto={employee.foto_cadastro_url}
+          isAdmin={isAdmin}
           onConfirm={handleConfirm}
+          onAdminAccess={isAdmin ? handleAdminAccess : undefined}
           onBack={handleBack}
         />
       )}
