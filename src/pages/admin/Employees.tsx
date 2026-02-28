@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +60,7 @@ export default function EmployeesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const { toast } = useToast();
+  const { selectedCompanyId } = useCompany();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -77,14 +79,20 @@ export default function EmployeesPage() {
   useEffect(() => {
     loadEmployees();
     loadSectors();
-  }, []);
+  }, [selectedCompanyId]);
 
   const loadEmployees = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('employees')
         .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, created_at, sectors(nome)')
         .order('nome');
+
+      if (selectedCompanyId) {
+        query = query.eq('company_id', selectedCompanyId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setEmployees((data || []).map(e => ({
@@ -101,11 +109,17 @@ export default function EmployeesPage() {
 
   const loadSectors = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('sectors')
         .select('id, nome')
         .eq('ativo', true)
         .order('nome');
+
+      if (selectedCompanyId) {
+        query = query.eq('company_id', selectedCompanyId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setSectors(data || []);
@@ -262,6 +276,7 @@ export default function EmployeesPage() {
             sector_id: formData.sector_id || null,
             data_admissao: formData.data_admissao || null,
             email: formData.hasAdminAccess ? formData.email : null,
+            company_id: selectedCompanyId || null,
           })
           .select('id')
           .single();

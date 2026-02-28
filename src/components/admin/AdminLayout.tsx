@@ -3,51 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 import { 
-  Sidebar, 
-  SidebarContent, 
-  SidebarHeader, 
-  SidebarMenu, 
-  SidebarMenuItem, 
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarTrigger,
-  SidebarInset,
+  Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, 
+  SidebarMenuButton, SidebarProvider, SidebarTrigger, SidebarInset,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { 
-  Clock, 
-  Users, 
-  CalendarDays, 
-  Wallet, 
-  LayoutDashboard,
-  Settings,
-  LogOut,
-  Loader2,
-  Building2
+  Clock, Users, CalendarDays, Wallet, LayoutDashboard,
+  Settings, LogOut, Loader2, Building2, Building
 } from 'lucide-react';
+import { CompanyProvider, useCompany } from '@/contexts/CompanyContext';
 
 interface AdminLayoutProps {
   children: ReactNode;
   currentPage: string;
 }
 
-export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
+function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { companies, selectedCompanyId, setSelectedCompanyId, isSuperAdmin } = useCompany();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
@@ -74,9 +62,7 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
@@ -85,6 +71,7 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
     { id: 'timesheet', label: 'Espelho de Ponto', icon: CalendarDays, href: '/admin/timesheet' },
     { id: 'hourbank', label: 'Banco de Horas', icon: Wallet, href: '/admin/hourbank' },
     { id: 'settings', label: 'Configurações', icon: Settings, href: '/admin/settings' },
+    ...(isSuperAdmin ? [{ id: 'companies', label: 'Empresas', icon: Building, href: '/admin/companies' }] : []),
   ];
 
   return (
@@ -132,9 +119,7 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
               </div>
             </div>
             <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleLogout}
+              variant="ghost" size="sm" onClick={handleLogout}
               className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground"
             >
               <LogOut className="w-4 h-4 mr-2" />
@@ -149,6 +134,21 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
             <h1 className="text-lg font-semibold">
               {menuItems.find(m => m.id === currentPage)?.label || 'Admin'}
             </h1>
+            {companies.length > 1 && (
+              <div className="ml-auto">
+                <Select value={selectedCompanyId || ''} onValueChange={setSelectedCompanyId}>
+                  <SelectTrigger className="w-56">
+                    <Building className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Selecione a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </header>
           <main className="p-6">
             {children}
@@ -156,5 +156,13 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+  );
+}
+
+export function AdminLayout(props: AdminLayoutProps) {
+  return (
+    <CompanyProvider>
+      <AdminLayoutInner {...props} />
+    </CompanyProvider>
   );
 }

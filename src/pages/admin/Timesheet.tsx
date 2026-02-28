@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,22 +68,25 @@ export default function TimesheetPage() {
     workDate: string;
   }>({ open: false, employeeId: '', employeeName: '', workDate: '' });
   const { toast } = useToast();
+  const { selectedCompanyId } = useCompany();
 
   useEffect(() => {
     loadEmployees();
-  }, []);
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     loadTimesheets();
-  }, [selectedEmployee, selectedMonth]);
+  }, [selectedEmployee, selectedMonth, selectedCompanyId]);
 
   const loadEmployees = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('employees')
         .select('id, nome')
         .eq('ativo', true)
         .order('nome');
+      if (selectedCompanyId) query = query.eq('company_id', selectedCompanyId);
+      const { data, error } = await query;
 
       if (error) throw error;
       setEmployees(data || []);
