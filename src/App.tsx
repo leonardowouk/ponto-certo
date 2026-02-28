@@ -14,8 +14,23 @@ import HourBank from "./pages/admin/HourBank";
 import Settings from "./pages/admin/Settings";
 import Companies from "./pages/admin/Companies";
 import NotFound from "./pages/NotFound";
+import { CompanyProvider } from "./contexts/CompanyContext";
 
 const queryClient = new QueryClient();
+
+const AdminRoutes = () => (
+  <CompanyProvider>
+    <Routes>
+      <Route path="/" element={<AdminDashboard />} />
+      <Route path="/employees" element={<Employees />} />
+      <Route path="/sectors" element={<Sectors />} />
+      <Route path="/timesheet" element={<Timesheet />} />
+      <Route path="/hourbank" element={<HourBank />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/companies" element={<Companies />} />
+    </Routes>
+  </CompanyProvider>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -27,13 +42,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/kiosk" element={<Kiosk />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/employees" element={<Employees />} />
-          <Route path="/admin/sectors" element={<Sectors />} />
-          <Route path="/admin/timesheet" element={<Timesheet />} />
-          <Route path="/admin/hourbank" element={<HourBank />} />
-          <Route path="/admin/settings" element={<Settings />} />
-          <Route path="/admin/companies" element={<Companies />} />
+          <Route path="/admin/*" element={<AdminRoutes />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

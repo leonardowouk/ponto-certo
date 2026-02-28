@@ -160,9 +160,5 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
 }
 
 export function AdminLayout(props: AdminLayoutProps) {
-  return (
-    <CompanyProvider>
-      <AdminLayoutInner {...props} />
-    </CompanyProvider>
-  );
+  return <AdminLayoutInner {...props} />;
 }
