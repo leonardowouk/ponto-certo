@@ -115,11 +115,15 @@ export default function TimesheetPage() {
           expected_minutes,
           balance_minutes,
           status,
-          employees!inner(nome)
+          employees!inner(nome, company_id)
         `)
         .gte('work_date', startDate.toISOString().split('T')[0])
         .lte('work_date', endDate.toISOString().split('T')[0])
         .order('work_date', { ascending: false });
+
+      if (selectedCompanyId) {
+        query = query.eq('employees.company_id', selectedCompanyId);
+      }
 
       if (selectedEmployee !== 'all') {
         query = query.eq('employee_id', selectedEmployee);
