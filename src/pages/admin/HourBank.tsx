@@ -84,13 +84,15 @@ export default function HourBankPage() {
 
   const loadBalances = async () => {
     try {
-      const { data, error } = await supabase
+      let balanceQuery = supabase
         .from('hour_bank_balance')
         .select(`
           employee_id,
           balance_minutes,
-          employees!inner(nome)
+          employees!inner(nome, company_id)
         `);
+      if (selectedCompanyId) balanceQuery = balanceQuery.eq('employees.company_id', selectedCompanyId);
+      const { data, error } = await balanceQuery;
 
       if (error) throw error;
 
@@ -118,10 +120,14 @@ export default function HourBankPage() {
           description,
           approval_status,
           created_at,
-          employees!inner(nome)
+          employees!inner(nome, company_id)
         `)
         .order('ref_date', { ascending: false })
         .limit(100);
+
+      if (selectedCompanyId) {
+        query = query.eq('employees.company_id', selectedCompanyId);
+      }
 
       if (selectedEmployee !== 'all') {
         query = query.eq('employee_id', selectedEmployee);

@@ -61,18 +61,22 @@ export default function AdminDashboard() {
       const { count: employeeCount } = await empQuery;
 
       // Batidas de hoje
-      const { count: punchCount } = await supabase
+      let punchQuery = supabase
         .from('time_punches')
-        .select('*', { count: 'exact', head: true })
+        .select('*, employees!inner(company_id)', { count: 'exact', head: true })
         .gte('punched_at', today.toISOString())
         .lt('punched_at', tomorrow.toISOString());
+      if (selectedCompanyId) punchQuery = punchQuery.eq('employees.company_id', selectedCompanyId);
+      const { count: punchCount } = await punchQuery;
 
       // Timesheets pendentes
-      const { count: pendingCount } = await supabase
+      let pendingQuery = supabase
         .from('timesheets_daily')
-        .select('*', { count: 'exact', head: true })
+        .select('*, employees!inner(company_id)', { count: 'exact', head: true })
         .eq('work_date', today.toISOString().split('T')[0])
         .in('status', ['pendente', 'revisao']);
+      if (selectedCompanyId) pendingQuery = pendingQuery.eq('employees.company_id', selectedCompanyId);
+      const { count: pendingCount } = await pendingQuery;
 
       setStats({
         totalEmployees: employeeCount || 0,
@@ -82,17 +86,19 @@ export default function AdminDashboard() {
       });
 
       // Últimas batidas
-      const { data: punches } = await supabase
+      let punchesQuery = supabase
         .from('time_punches')
         .select(`
           id,
           punch_type,
           punched_at,
           status,
-          employees!inner(nome)
+          employees!inner(nome, company_id)
         `)
         .order('punched_at', { ascending: false })
         .limit(10);
+      if (selectedCompanyId) punchesQuery = punchesQuery.eq('employees.company_id', selectedCompanyId);
+      const { data: punches } = await punchesQuery;
 
       if (punches) {
         setRecentPunches(punches.map((p: { id: string; punch_type: string; punched_at: string; status: string; employees: { nome: string } }) => ({
@@ -105,17 +111,19 @@ export default function AdminDashboard() {
       }
 
       // Resumo de hoje
-      const { data: timesheets } = await supabase
+      let tsQuery = supabase
         .from('timesheets_daily')
         .select(`
           id,
           status,
           balance_minutes,
-          employees!inner(nome)
+          employees!inner(nome, company_id)
         `)
         .eq('work_date', today.toISOString().split('T')[0])
         .order('status', { ascending: true })
         .limit(20);
+      if (selectedCompanyId) tsQuery = tsQuery.eq('employees.company_id', selectedCompanyId);
+      const { data: timesheets } = await tsQuery;
 
       if (timesheets) {
         setTodaySummary(timesheets.map((t: { id: string; status: string; balance_minutes: number; employees: { nome: string } }) => ({
