@@ -12,6 +12,7 @@ import Sectors from "./pages/admin/Sectors";
 import Timesheet from "./pages/admin/Timesheet";
 import HourBank from "./pages/admin/HourBank";
 import Settings from "./pages/admin/Settings";
+import Companies from "./pages/admin/Companies";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/admin/timesheet" element={<Timesheet />} />
           <Route path="/admin/hourbank" element={<HourBank />} />
           <Route path="/admin/settings" element={<Settings />} />
+          <Route path="/admin/companies" element={<Companies />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

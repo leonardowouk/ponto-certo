@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,10 +39,11 @@ export default function AdminDashboard() {
   const [recentPunches, setRecentPunches] = useState<RecentPunch[]>([]);
   const [todaySummary, setTodaySummary] = useState<TimesheetSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selectedCompanyId } = useCompany();
 
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, [selectedCompanyId]);
 
   const loadDashboardData = async () => {
     try {
@@ -51,10 +53,12 @@ export default function AdminDashboard() {
       tomorrow.setDate(tomorrow.getDate() + 1);
 
       // Total de colaboradores ativos
-      const { count: employeeCount } = await supabase
+      let empQuery = supabase
         .from('employees')
         .select('*', { count: 'exact', head: true })
         .eq('ativo', true);
+      if (selectedCompanyId) empQuery = empQuery.eq('company_id', selectedCompanyId);
+      const { count: employeeCount } = await empQuery;
 
       // Batidas de hoje
       const { count: punchCount } = await supabase

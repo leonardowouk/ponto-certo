@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -80,7 +81,7 @@ export default function SectorsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSector, setEditingSector] = useState<Sector | null>(null);
   const { toast } = useToast();
-
+  const { selectedCompanyId } = useCompany();
   const [formData, setFormData] = useState({
     nome: '',
     expected_start: '08:00',
@@ -94,11 +95,11 @@ export default function SectorsPage() {
 
   useEffect(() => {
     loadSectors();
-  }, []);
+  }, [selectedCompanyId]);
 
   const loadSectors = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('sectors')
         .select(`
           id,
@@ -117,6 +118,11 @@ export default function SectorsPage() {
         `)
         .order('nome');
 
+      if (selectedCompanyId) {
+        query = query.eq('company_id', selectedCompanyId);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       
       // Map data to expected format (sector_schedules comes as array from Supabase)
@@ -228,7 +234,7 @@ export default function SectorsPage() {
         // Create sector
         const { data: newSector, error: sectorError } = await supabase
           .from('sectors')
-          .insert({ nome: formData.nome })
+          .insert({ nome: formData.nome, company_id: selectedCompanyId || null })
           .select('id')
           .single();
 

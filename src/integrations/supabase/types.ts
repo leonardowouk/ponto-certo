@@ -14,10 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          ativo: boolean | null
+          cnpj_hash: string | null
+          created_at: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          cnpj_hash?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          ativo?: boolean | null
+          cnpj_hash?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
       employees: {
         Row: {
           ativo: boolean | null
           cargo: string | null
+          company_id: string | null
           cpf_encrypted: string | null
           cpf_hash: string
           created_at: string | null
@@ -36,6 +61,7 @@ export type Database = {
         Insert: {
           ativo?: boolean | null
           cargo?: string | null
+          company_id?: string | null
           cpf_encrypted?: string | null
           cpf_hash: string
           created_at?: string | null
@@ -54,6 +80,7 @@ export type Database = {
         Update: {
           ativo?: boolean | null
           cargo?: string | null
+          company_id?: string | null
           cpf_encrypted?: string | null
           cpf_hash?: string
           created_at?: string | null
@@ -70,6 +97,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "employees_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "employees_sector_id_fkey"
             columns: ["sector_id"]
@@ -244,27 +278,39 @@ export type Database = {
       sectors: {
         Row: {
           ativo: boolean | null
+          company_id: string | null
           created_at: string | null
           id: string
           nome: string
         }
         Insert: {
           ativo?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
           nome: string
         }
         Update: {
           ativo?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           id?: string
           nome?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sectors_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       time_devices: {
         Row: {
           ativo: boolean | null
+          company_id: string | null
           created_at: string | null
           device_secret_hash: string
           id: string
@@ -273,6 +319,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           device_secret_hash: string
           id?: string
@@ -281,13 +328,22 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          company_id?: string | null
           created_at?: string | null
           device_secret_hash?: string
           id?: string
           nome?: string
           unidade?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "time_devices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       time_punches: {
         Row: {
@@ -396,6 +452,35 @@ export type Database = {
           },
         ]
       }
+      user_company_access: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_company_access_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -478,6 +563,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_company_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -486,6 +572,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin_or_rh: { Args: { _user_id: string }; Returns: boolean }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "rh" | "gestor" | "colaborador" | "super_admin"

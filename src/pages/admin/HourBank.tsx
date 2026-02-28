@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/admin/AdminLayout';
+import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,23 +54,26 @@ export default function HourBankPage() {
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { selectedCompanyId } = useCompany();
 
   useEffect(() => {
     loadEmployees();
     loadBalances();
-  }, []);
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     loadLedger();
-  }, [selectedEmployee]);
+  }, [selectedEmployee, selectedCompanyId]);
 
   const loadEmployees = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('employees')
         .select('id, nome')
         .eq('ativo', true)
         .order('nome');
+      if (selectedCompanyId) query = query.eq('company_id', selectedCompanyId);
+      const { data, error } = await query;
 
       if (error) throw error;
       setEmployees(data || []);
