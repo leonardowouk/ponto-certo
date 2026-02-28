@@ -1,94 +1,137 @@
 
-# Plano de Melhorias - Modo Quiosque
 
-## ✅ Status: Implementado
+# Multi-Empresa: Admin Central Gerencia Tudo
 
-As seguintes melhorias foram implementadas:
+## Resumo
 
-### Prioridade Alta (Estabilidade) ✅
+Adicionar suporte a multiplas empresas no sistema, onde um super-admin central pode cadastrar empresas e alternar entre elas. Cada empresa tera seus proprios colaboradores, setores, dispositivos e configuracoes. Admins locais veem apenas dados da sua empresa.
 
-1. **Timeout de inatividade** - `useInactivityTimeout.ts`
-   - Reset automático após 60 segundos de inatividade
-   - Monitora clicks, toques, teclas e scroll
+## O que muda para voce
 
-2. **Tratamento da câmera melhorado** - `SelfieCapture.tsx`
-   - Retry automático para erros temporários
-   - Mensagens específicas para NotAllowedError, NotFoundError, etc.
-   - Botão "Tentar novamente" com UI clara
-   - Cleanup correto do stream para evitar memory leaks
+- Uma nova pagina "Empresas" no painel admin para cadastrar e gerenciar empresas
+- Um seletor de empresa no topo do painel para alternar entre elas
+- Cada empresa tem seus proprios colaboradores, setores, dispositivos e batidas
+- Um novo tipo de usuario "super_admin" que pode ver e gerenciar todas as empresas
 
-3. **Toasts em vez de alerts** - `Kiosk.tsx`
-   - Todos os `alert()` substituídos por toasts elegantes
-   - Integração com shadcn/ui toast system
+## Etapas de Implementacao
 
-4. **Loading durante validação do PIN** - `PINInput.tsx`
-   - Estado de loading visual no botão "Confirmar"
-   - Keypad desabilitado durante validação
-   - Reset automático do PIN em caso de erro
+### 1. Criar tabela `companies` e adicionar role `super_admin`
 
-### Prioridade Média (UX) ✅
+Nova tabela para armazenar empresas:
 
-1. **Indicador de progresso** - `ProgressIndicator.tsx`
-   - Mostra etapas 1/4, 2/4, etc.
-   - Visual de checkmark para etapas concluídas
-   - Labels: CPF → PIN → Confirmar → Selfie
+```text
+companies
+---------
+id (uuid, PK)
+nome (text)
+cnpj_hash (text, unique)  -- CNPJ hasheado para privacidade
+ativo (boolean, default true)
+created_at (timestamptz)
+```
 
-2. **Detector de conexão offline** - `useOnlineStatus.ts` + `ConnectionStatus.tsx`
-   - Indicador visual no header
-   - Verificação periódica a cada 30 segundos
-   - Bloqueia ações quando offline com toast de aviso
+Adicionar `company_id` nas tabelas existentes:
+- `employees` -- vincula colaborador a empresa
+- `sectors` -- vincula setor a empresa
+- `time_devices` -- vincula dispositivo a empresa
+- `time_punches` -- herda da batida
+- `timesheets_daily` -- herda do colaborador
+- `hour_bank_ledger` -- herda do colaborador
 
-3. **Feedback visual melhorado**
-   - Animações de entrada em cada tela
-   - Transições suaves entre estados
+Adicionar nova role `super_admin` ao enum `app_role`.
 
-### Prioridade Baixa (Extras) ✅
+Criar tabela `user_company_access` para vincular admins locais a empresas.
 
-1. **Feedback háptico** - `useHapticFeedback.ts`
-   - Vibração leve em cada tecla
-   - Vibração de sucesso/erro em ações
-   - Padrões: light, medium, heavy, success, error, warning
+### 2. Atualizar politicas RLS
 
-2. **Prevenção de toques acidentais**
-   - Desabilita double-tap zoom
-   - Desabilita pinch zoom
-   - Debounce implícito via loading states
+- Admins locais so veem dados da(s) empresa(s) que tem acesso
+- Super-admins veem todas as empresas
+- Criar funcao `get_user_company_ids()` (security definer) que retorna IDs das empresas que o usuario pode acessar
 
-### ⏳ Ainda pendente (baixa prioridade)
+### 3. Criar pagina de Empresas no Admin
 
-1. **Configuração do device_secret**
-   - Criar tela de setup inicial
-   - Armazenar em localStorage
-   - Reset via código admin
+- Listar, cadastrar e editar empresas
+- Apenas super_admin pode acessar
+- Campos: nome, CNPJ, status (ativo/inativo)
 
-2. **Sons de confirmação**
-   - Tocar som ao registrar ponto
-   - Feedback auditivo para erros
+### 4. Adicionar seletor de empresa no AdminLayout
+
+- Dropdown no header para alternar entre empresas
+- Armazenar empresa selecionada em estado (React Context)
+- Todas as queries filtram pela empresa selecionada
+
+### 5. Atualizar todas as paginas admin
+
+- Colaboradores, Setores, Dashboard, Timesheet, Banco de Horas e Configuracoes filtram por `company_id`
+- Formularios de cadastro enviam `company_id` automaticamente
+
+### 6. Atualizar Edge Functions
+
+- `ponto-validate`: incluir `company_id` ao registrar batidas
+- Dispositivos vinculados a empresa especifica
+
+### 7. Migrar dados existentes
+
+- Criar empresa padrao "Cookie do Boleta" (ou nome que preferir)
+- Vincular todos os registros existentes a essa empresa
+- Tornar o usuario Thiago um `super_admin`
 
 ---
 
-## Arquivos Criados
+## Detalhes Tecnicos
 
-```text
-src/hooks/
-├── useInactivityTimeout.ts  ✅
-├── useOnlineStatus.ts       ✅
-└── useHapticFeedback.ts     ✅
+### Nova role no enum
 
-src/components/kiosk/
-├── ConnectionStatus.tsx     ✅
-└── ProgressIndicator.tsx    ✅
+```sql
+ALTER TYPE public.app_role ADD VALUE 'super_admin';
 ```
 
-## Arquivos Atualizados
+### Tabela companies
 
-```text
-src/pages/Kiosk.tsx           ✅ (toasts, inactivity, online check, progress)
-src/components/kiosk/
-├── KioskLayout.tsx           ✅ (connection status, toaster)
-├── SelfieCapture.tsx         ✅ (retry, errors, haptic)
-├── PINInput.tsx              ✅ (loading, haptic, auto-reset)
-└── CPFInput.tsx              ✅ (haptic feedback)
+```sql
+CREATE TABLE public.companies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome text NOT NULL,
+  cnpj_hash text UNIQUE,
+  ativo boolean DEFAULT true,
+  created_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
 ```
 
+### Coluna company_id nas tabelas existentes
+
+```sql
+ALTER TABLE employees ADD COLUMN company_id uuid REFERENCES companies(id);
+ALTER TABLE sectors ADD COLUMN company_id uuid REFERENCES companies(id);
+ALTER TABLE time_devices ADD COLUMN company_id uuid REFERENCES companies(id);
+```
+
+### Tabela de acesso por empresa
+
+```sql
+CREATE TABLE public.user_company_access (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  UNIQUE(user_id, company_id)
+);
+```
+
+### React Context para empresa ativa
+
+Um `CompanyContext` sera criado para compartilhar a empresa selecionada entre todas as paginas admin, evitando passar props manualmente.
+
+### Arquivos que serao modificados
+
+- `src/components/admin/AdminLayout.tsx` -- seletor de empresa + context provider
+- `src/pages/admin/Employees.tsx` -- filtro por company_id
+- `src/pages/admin/Sectors.tsx` -- filtro por company_id
+- `src/pages/admin/Dashboard.tsx` -- filtro por company_id
+- `src/pages/admin/Timesheet.tsx` -- filtro por company_id
+- `src/pages/admin/HourBank.tsx` -- filtro por company_id
+- `src/pages/admin/Settings.tsx` -- configuracoes por empresa
+- `supabase/functions/ponto-validate/index.ts` -- company_id nas batidas
+- **Novo:** `src/pages/admin/Companies.tsx`
+- **Novo:** `src/contexts/CompanyContext.tsx`
+- **Novo:** `src/App.tsx` -- rota /admin/companies
 
