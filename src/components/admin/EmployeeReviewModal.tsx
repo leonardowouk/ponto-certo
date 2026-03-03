@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { format } from 'date-fns';
+import { format, eachDayOfInterval, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle, Loader2, Pencil, Save, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -29,6 +30,7 @@ interface DayWithPunches {
   status: string | null;
   notes: string | null;
   punches: Punch[];
+  isMissing?: boolean; // day expected but no timesheet record
 }
 
 interface EmployeeReviewModalProps {
@@ -54,13 +56,6 @@ const formatTime = (iso: string | null) => {
   return format(new Date(iso), 'HH:mm');
 };
 
-const punchTypeLabel: Record<string, string> = {
-  entrada: 'Ent.',
-  saida: 'Saí.',
-  intervalo_inicio: 'Int.↓',
-  intervalo_fim: 'Int.↑',
-};
-
 const statusBadge = (s: string | null) => {
   const map: Record<string, string> = {
     ok: 'bg-green-100 text-green-800',
@@ -68,8 +63,13 @@ const statusBadge = (s: string | null) => {
     revisao: 'bg-orange-100 text-orange-800',
     ajustado: 'bg-blue-100 text-blue-800',
     falta: 'bg-red-100 text-red-800',
+    abono: 'bg-purple-100 text-purple-800',
   };
   return map[s || ''] || 'bg-muted text-muted-foreground';
+};
+
+const dayOfWeekKey = (jsDay: number): string => {
+  return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][jsDay];
 };
 
 export function EmployeeReviewModal({
@@ -80,49 +80,147 @@ export function EmployeeReviewModal({
   const [saving, setSaving] = useState(false);
   const [editingDay, setEditingDay] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ entrada: string; saidaInt: string; retornoInt: string; saida: string; justificativa: string }>({ entrada: '', saidaInt: '', retornoInt: '', saida: '', justificativa: '' });
+  const [savingMissing, setSavingMissing] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (open) loadDays();
   }, [open, employeeId, refMonth]);
 
+  const getExpectedWorkDays = async (): Promise<Set<string>> => {
+    const startDate = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1);
+    const endDate = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0);
+    const allDays = eachDayOfInterval({ start: startDate, end: endDate });
+
+    // Try employee work_schedule first
+    const { data: ws } = await supabase
+      .from('work_schedules')
+      .select('weekly_days')
+      .eq('employee_id', employeeId)
+      .maybeSingle();
+
+    let weeklyDays: Record<string, boolean> | null = null;
+
+    if (ws?.weekly_days) {
+      weeklyDays = ws.weekly_days as Record<string, boolean>;
+    } else {
+      // Try sector schedule
+      const { data: emp } = await supabase
+        .from('employees')
+        .select('sector_id')
+        .eq('id', employeeId)
+        .maybeSingle();
+
+      if (emp?.sector_id) {
+        const { data: ss } = await supabase
+          .from('sector_schedules')
+          .select('weekly_days')
+          .eq('sector_id', emp.sector_id)
+          .maybeSingle();
+
+        if (ss?.weekly_days) {
+          weeklyDays = ss.weekly_days as Record<string, boolean>;
+        }
+      }
+    }
+
+    // Default: mon-fri
+    if (!weeklyDays) {
+      weeklyDays = { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false };
+    }
+
+    const workDates = new Set<string>();
+    for (const day of allDays) {
+      const key = dayOfWeekKey(getDay(day));
+      if (weeklyDays[key]) {
+        workDates.add(format(day, 'yyyy-MM-dd'));
+      }
+    }
+    return workDates;
+  };
+
   const loadDays = async () => {
     setLoading(true);
     const startDate = format(refMonth, 'yyyy-MM-dd');
     const endDate = format(new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0), 'yyyy-MM-dd');
 
-    // Load timesheets
-    const { data: tsData } = await supabase
-      .from('timesheets_daily')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .gte('work_date', startDate)
-      .lte('work_date', endDate)
-      .order('work_date', { ascending: true });
+    const [tsResult, punchResult, expectedDays] = await Promise.all([
+      supabase
+        .from('timesheets_daily')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .gte('work_date', startDate)
+        .lte('work_date', endDate)
+        .order('work_date', { ascending: true }),
+      supabase
+        .from('time_punches')
+        .select('id, punch_type, punched_at, status')
+        .eq('employee_id', employeeId)
+        .gte('punched_at', startDate + 'T00:00:00')
+        .lte('punched_at', endDate + 'T23:59:59')
+        .order('punched_at', { ascending: true }),
+      getExpectedWorkDays(),
+    ]);
 
-    // Load all punches for the month
-    const { data: punchData } = await supabase
-      .from('time_punches')
-      .select('id, punch_type, punched_at, status')
-      .eq('employee_id', employeeId)
-      .gte('punched_at', startDate + 'T00:00:00')
-      .lte('punched_at', endDate + 'T23:59:59')
-      .order('punched_at', { ascending: true });
+    const tsData = tsResult.data || [];
+    const punchData = punchResult.data || [];
 
     // Group punches by date
     const punchMap = new Map<string, Punch[]>();
-    (punchData || []).forEach(p => {
+    punchData.forEach(p => {
       const date = format(new Date(p.punched_at), 'yyyy-MM-dd');
       if (!punchMap.has(date)) punchMap.set(date, []);
       punchMap.get(date)!.push(p as Punch);
     });
 
-    const daysWithPunches: DayWithPunches[] = (tsData || []).map(d => ({
-      ...d,
-      punches: punchMap.get(d.work_date) || [],
-    }));
+    // Map existing timesheets
+    const tsMap = new Map<string, any>();
+    tsData.forEach(d => tsMap.set(d.work_date, d));
 
-    setDays(daysWithPunches);
+    // Build full list: all expected days
+    const allDaysList: DayWithPunches[] = [];
+    const sortedDates = Array.from(expectedDays).sort();
+
+    for (const dateStr of sortedDates) {
+      const existing = tsMap.get(dateStr);
+      if (existing) {
+        allDaysList.push({
+          ...existing,
+          punches: punchMap.get(dateStr) || [],
+          isMissing: false,
+        });
+      } else {
+        // Missing day - expected to work but no timesheet
+        allDaysList.push({
+          id: `missing-${dateStr}`,
+          work_date: dateStr,
+          first_punch_at: null,
+          last_punch_at: null,
+          worked_minutes: 0,
+          expected_minutes: 0,
+          balance_minutes: 0,
+          break_minutes: 0,
+          status: null,
+          notes: null,
+          punches: [],
+          isMissing: true,
+        });
+      }
+    }
+
+    // Also include any timesheet days that are NOT in expected (e.g. extra days worked)
+    for (const ts of tsData) {
+      if (!expectedDays.has(ts.work_date)) {
+        allDaysList.push({
+          ...ts,
+          punches: punchMap.get(ts.work_date) || [],
+          isMissing: false,
+        });
+      }
+    }
+
+    allDaysList.sort((a, b) => a.work_date.localeCompare(b.work_date));
+    setDays(allDaysList);
     setLoading(false);
   };
 
@@ -135,6 +233,54 @@ export function EmployeeReviewModal({
     }),
     { worked: 0, expected: 0, balance: 0, breaks: 0 }
   );
+
+  const hasUnresolvedDays = days.some(d =>
+    d.isMissing || d.status === 'pendente' || d.status === 'revisao' || d.status === null
+  );
+
+  const handleMarkMissingDay = async (day: DayWithPunches, newStatus: 'falta' | 'abono') => {
+    setSavingMissing(day.work_date);
+
+    if (day.isMissing) {
+      // Create a new timesheet_daily record
+      const { error } = await supabase
+        .from('timesheets_daily')
+        .insert({
+          employee_id: employeeId,
+          work_date: day.work_date,
+          worked_minutes: 0,
+          expected_minutes: 0,
+          balance_minutes: 0,
+          break_minutes: 0,
+          status: newStatus as any,
+          notes: newStatus === 'abono' ? 'Abono de falta' : 'Falta registrada no fechamento',
+        });
+
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: newStatus === 'abono' ? 'Abono registrado' : 'Falta registrada' });
+        loadDays();
+      }
+    } else {
+      // Update existing timesheet
+      const { error } = await supabase
+        .from('timesheets_daily')
+        .update({
+          status: newStatus as any,
+          notes: newStatus === 'abono' ? 'Abono de falta' : 'Falta registrada no fechamento',
+        })
+        .eq('id', day.id);
+
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: newStatus === 'abono' ? 'Abono registrado' : 'Falta registrada' });
+        loadDays();
+      }
+    }
+    setSavingMissing(null);
+  };
 
   const startEdit = (day: DayWithPunches) => {
     const entrada = day.punches.find(p => p.punch_type === 'entrada');
@@ -161,14 +307,12 @@ export function EmployeeReviewModal({
       return;
     }
 
-    // Helper to build ISO timestamp from HH:mm
     const toIso = (time: string) => {
       if (!time) return null;
       return `${day.work_date}T${time}:00`;
     };
 
-    // Update punches
-    const punchUpdates: { type: string; time: string | null; existingId?: string }[] = [
+    const punchUpdates = [
       { type: 'entrada', time: toIso(editValues.entrada), existingId: day.punches.find(p => p.punch_type === 'entrada')?.id },
       { type: 'intervalo_inicio', time: toIso(editValues.saidaInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_inicio')?.id },
       { type: 'intervalo_fim', time: toIso(editValues.retornoInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_fim')?.id },
@@ -186,7 +330,6 @@ export function EmployeeReviewModal({
       }
     }
 
-    // Update timesheet notes with justification
     const existingNotes = day.notes || '';
     const newNote = `[Ajuste] ${editValues.justificativa.trim()}`;
     const { error } = await supabase
@@ -207,6 +350,15 @@ export function EmployeeReviewModal({
   };
 
   const handleMarkReviewed = async () => {
+    if (hasUnresolvedDays) {
+      toast({
+        title: 'Dias pendentes',
+        description: 'Todos os dias devem estar resolvidos (com ponto, abono ou falta) antes de conferir.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSaving(true);
     const { data: session } = await supabase.auth.getSession();
     const userId = session?.session?.user?.id;
@@ -232,6 +384,10 @@ export function EmployeeReviewModal({
     setSaving(false);
   };
 
+  const isReadOnly = currentStatus === 'fechado';
+  const needsResolution = (d: DayWithPunches) =>
+    d.isMissing || d.status === null || d.status === 'pendente' || d.status === 'revisao';
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-5xl max-h-[85vh] overflow-auto">
@@ -246,6 +402,12 @@ export function EmployeeReviewModal({
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin" /></div>
         ) : (
           <>
+            {hasUnresolvedDays && !isReadOnly && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-800">
+                ⚠️ Existem dias sem ponto que precisam ser resolvidos como <strong>Falta</strong> ou <strong>Abono</strong> antes de conferir.
+              </div>
+            )}
+
             <Table>
               <TableHeader>
                 <TableRow>
@@ -258,8 +420,7 @@ export function EmployeeReviewModal({
                   <TableHead className="text-center">Esper.</TableHead>
                   <TableHead className="text-center">Saldo</TableHead>
                   <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-center">Justificativa</TableHead>
-                  {currentStatus !== 'fechado' && <TableHead className="text-center w-16"></TableHead>}
+                  <TableHead className="text-center">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -269,11 +430,12 @@ export function EmployeeReviewModal({
                   const intInicio = d.punches.find(p => p.punch_type === 'intervalo_inicio');
                   const intFim = d.punches.find(p => p.punch_type === 'intervalo_fim');
                   const saida = d.punches.find(p => p.punch_type === 'saida');
+                  const showResolution = needsResolution(d) && !isReadOnly;
 
                   return (
-                    <TableRow key={d.id}>
+                    <TableRow key={d.id} className={d.isMissing ? 'bg-red-50' : ''}>
                       <TableCell className="whitespace-nowrap">
-                        {format(new Date(d.work_date + 'T12:00:00'), 'dd/MM/yyyy')}
+                        {format(new Date(d.work_date + 'T12:00:00'), "EEE dd/MM", { locale: ptBR })}
                       </TableCell>
                       <TableCell className="text-center">
                         {isEditing ? (
@@ -305,38 +467,51 @@ export function EmployeeReviewModal({
                         {formatMinutes(d.balance_minutes)}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge className={statusBadge(d.status)}>{d.status || '-'}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-xs max-w-[160px]">
-                        {isEditing ? (
-                          <Input
-                            className="w-full h-7 text-xs"
-                            value={editValues.justificativa}
-                            onChange={e => setEditValues(v => ({ ...v, justificativa: e.target.value }))}
-                            placeholder="Justificativa obrigatória..."
-                          />
+                        {d.isMissing && !d.status ? (
+                          <Badge className="bg-red-100 text-red-800">Sem ponto</Badge>
                         ) : (
-                          <span title={d.notes || ''}>{d.notes || '—'}</span>
+                          <Badge className={statusBadge(d.status)}>{d.status || '-'}</Badge>
                         )}
                       </TableCell>
-                      {currentStatus !== 'fechado' && (
-                        <TableCell className="text-center">
-                          {isEditing ? (
+                      <TableCell className="text-center">
+                        {showResolution ? (
+                          savingMissing === d.work_date ? (
+                            <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                          ) : (
                             <div className="flex gap-1 justify-center">
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d)}>
-                                <Save className="w-3 h-3" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs px-2 text-red-700 border-red-300 hover:bg-red-50"
+                                onClick={() => handleMarkMissingDay(d, 'falta')}
+                              >
+                                Falta
                               </Button>
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}>
-                                <X className="w-3 h-3" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs px-2 text-purple-700 border-purple-300 hover:bg-purple-50"
+                                onClick={() => handleMarkMissingDay(d, 'abono')}
+                              >
+                                Abono
                               </Button>
                             </div>
-                          ) : (
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
-                              <Pencil className="w-3 h-3" />
+                          )
+                        ) : isEditing ? (
+                          <div className="flex gap-1 justify-center">
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d)}>
+                              <Save className="w-3 h-3" />
                             </Button>
-                          )}
-                        </TableCell>
-                      )}
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : !isReadOnly && !d.isMissing ? (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+                        ) : null}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -349,14 +524,17 @@ export function EmployeeReviewModal({
                   <TableCell className={`text-center font-bold ${totals.balance < 0 ? 'text-destructive' : ''}`}>
                     {formatMinutes(totals.balance)}
                   </TableCell>
-                  <TableCell colSpan={currentStatus !== 'fechado' ? 3 : 2} />
+                  <TableCell colSpan={2} />
                 </TableRow>
               </TableFooter>
             </Table>
 
-            {currentStatus !== 'fechado' && currentStatus !== 'conferido' && (
-              <div className="flex justify-end mt-4">
-                <Button onClick={handleMarkReviewed} disabled={saving}>
+            {!isReadOnly && currentStatus !== 'conferido' && (
+              <div className="flex justify-end mt-4 gap-2 items-center">
+                {hasUnresolvedDays && (
+                  <span className="text-sm text-muted-foreground">Resolva todos os dias pendentes para conferir</span>
+                )}
+                <Button onClick={handleMarkReviewed} disabled={saving || hasUnresolvedDays}>
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
                   Marcar como Conferido
                 </Button>
