@@ -79,7 +79,7 @@ export function EmployeeReviewModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingDay, setEditingDay] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<{ worked: string; expected: string; notes: string }>({ worked: '', expected: '', notes: '' });
+  const [editValues, setEditValues] = useState<{ entrada: string; saidaInt: string; retornoInt: string; saida: string; justificativa: string }>({ entrada: '', saidaInt: '', retornoInt: '', saida: '', justificativa: '' });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -137,11 +137,17 @@ export function EmployeeReviewModal({
   );
 
   const startEdit = (day: DayWithPunches) => {
+    const entrada = day.punches.find(p => p.punch_type === 'entrada');
+    const intInicio = day.punches.find(p => p.punch_type === 'intervalo_inicio');
+    const intFim = day.punches.find(p => p.punch_type === 'intervalo_fim');
+    const saida = day.punches.find(p => p.punch_type === 'saida');
     setEditingDay(day.id);
     setEditValues({
-      worked: String(day.worked_minutes || 0),
-      expected: String(day.expected_minutes || 0),
-      notes: day.notes || '',
+      entrada: entrada?.punched_at ? format(new Date(entrada.punched_at), 'HH:mm') : (day.first_punch_at ? format(new Date(day.first_punch_at), 'HH:mm') : ''),
+      saidaInt: intInicio?.punched_at ? format(new Date(intInicio.punched_at), 'HH:mm') : '',
+      retornoInt: intFim?.punched_at ? format(new Date(intFim.punched_at), 'HH:mm') : '',
+      saida: saida?.punched_at ? format(new Date(saida.punched_at), 'HH:mm') : (day.last_punch_at ? format(new Date(day.last_punch_at), 'HH:mm') : ''),
+      justificativa: '',
     });
   };
 
@@ -149,24 +155,50 @@ export function EmployeeReviewModal({
     setEditingDay(null);
   };
 
-  const saveEdit = async (dayId: string) => {
-    const worked = parseInt(editValues.worked) || 0;
-    const expected = parseInt(editValues.expected) || 0;
-    const balance = worked - expected;
+  const saveEdit = async (day: DayWithPunches) => {
+    if (!editValues.justificativa.trim()) {
+      toast({ title: 'Justificativa obrigatória', description: 'Informe o motivo do ajuste.', variant: 'destructive' });
+      return;
+    }
 
+    // Helper to build ISO timestamp from HH:mm
+    const toIso = (time: string) => {
+      if (!time) return null;
+      return `${day.work_date}T${time}:00`;
+    };
+
+    // Update punches
+    const punchUpdates: { type: string; time: string | null; existingId?: string }[] = [
+      { type: 'entrada', time: toIso(editValues.entrada), existingId: day.punches.find(p => p.punch_type === 'entrada')?.id },
+      { type: 'intervalo_inicio', time: toIso(editValues.saidaInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_inicio')?.id },
+      { type: 'intervalo_fim', time: toIso(editValues.retornoInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_fim')?.id },
+      { type: 'saida', time: toIso(editValues.saida), existingId: day.punches.find(p => p.punch_type === 'saida')?.id },
+    ];
+
+    let hasError = false;
+    for (const pu of punchUpdates) {
+      if (pu.existingId && pu.time) {
+        const { error } = await supabase
+          .from('time_punches')
+          .update({ punched_at: pu.time, status: 'ajustado' as any })
+          .eq('id', pu.existingId);
+        if (error) { hasError = true; console.error(error); }
+      }
+    }
+
+    // Update timesheet notes with justification
+    const existingNotes = day.notes || '';
+    const newNote = `[Ajuste] ${editValues.justificativa.trim()}`;
     const { error } = await supabase
       .from('timesheets_daily')
       .update({
-        worked_minutes: worked,
-        expected_minutes: expected,
-        balance_minutes: balance,
-        notes: editValues.notes || null,
+        notes: existingNotes ? `${existingNotes} | ${newNote}` : newNote,
         status: 'ajustado' as any,
       })
-      .eq('id', dayId);
+      .eq('id', day.id);
 
-    if (error) {
-      toast({ title: 'Erro ao salvar ajuste', description: error.message, variant: 'destructive' });
+    if (error || hasError) {
+      toast({ title: 'Erro ao salvar ajuste', description: error?.message || 'Erro ao atualizar batidas', variant: 'destructive' });
     } else {
       toast({ title: 'Ajuste salvo!' });
       setEditingDay(null);
@@ -226,7 +258,7 @@ export function EmployeeReviewModal({
                   <TableHead className="text-center">Esper.</TableHead>
                   <TableHead className="text-center">Saldo</TableHead>
                   <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-center">Obs.</TableHead>
+                  <TableHead className="text-center">Justificativa</TableHead>
                   {currentStatus !== 'fechado' && <TableHead className="text-center w-16"></TableHead>}
                 </TableRow>
               </TableHeader>
@@ -243,51 +275,55 @@ export function EmployeeReviewModal({
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(d.work_date + 'T12:00:00'), 'dd/MM/yyyy')}
                       </TableCell>
-                      <TableCell className="text-center">{formatTime(entrada?.punched_at || d.first_punch_at)}</TableCell>
-                      <TableCell className="text-center">{formatTime(intInicio?.punched_at || null)}</TableCell>
-                      <TableCell className="text-center">{formatTime(intFim?.punched_at || null)}</TableCell>
-                      <TableCell className="text-center">{formatTime(saida?.punched_at || d.last_punch_at)}</TableCell>
                       <TableCell className="text-center">
                         {isEditing ? (
-                          <Input
-                            type="number" className="w-16 h-7 text-xs text-center mx-auto"
-                            value={editValues.worked}
-                            onChange={e => setEditValues(v => ({ ...v, worked: e.target.value }))}
-                          />
-                        ) : formatMinutes(d.worked_minutes)}
+                          <Input type="time" className="w-24 h-7 text-xs text-center mx-auto" value={editValues.entrada}
+                            onChange={e => setEditValues(v => ({ ...v, entrada: e.target.value }))} />
+                        ) : formatTime(entrada?.punched_at || d.first_punch_at)}
                       </TableCell>
                       <TableCell className="text-center">
                         {isEditing ? (
-                          <Input
-                            type="number" className="w-16 h-7 text-xs text-center mx-auto"
-                            value={editValues.expected}
-                            onChange={e => setEditValues(v => ({ ...v, expected: e.target.value }))}
-                          />
-                        ) : formatMinutes(d.expected_minutes)}
+                          <Input type="time" className="w-24 h-7 text-xs text-center mx-auto" value={editValues.saidaInt}
+                            onChange={e => setEditValues(v => ({ ...v, saidaInt: e.target.value }))} />
+                        ) : formatTime(intInicio?.punched_at || null)}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {isEditing ? (
+                          <Input type="time" className="w-24 h-7 text-xs text-center mx-auto" value={editValues.retornoInt}
+                            onChange={e => setEditValues(v => ({ ...v, retornoInt: e.target.value }))} />
+                        ) : formatTime(intFim?.punched_at || null)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isEditing ? (
+                          <Input type="time" className="w-24 h-7 text-xs text-center mx-auto" value={editValues.saida}
+                            onChange={e => setEditValues(v => ({ ...v, saida: e.target.value }))} />
+                        ) : formatTime(saida?.punched_at || d.last_punch_at)}
+                      </TableCell>
+                      <TableCell className="text-center">{formatMinutes(d.worked_minutes)}</TableCell>
+                      <TableCell className="text-center">{formatMinutes(d.expected_minutes)}</TableCell>
                       <TableCell className={`text-center ${(d.balance_minutes ?? 0) < 0 ? 'text-destructive' : ''}`}>
                         {formatMinutes(d.balance_minutes)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge className={statusBadge(d.status)}>{d.status || '-'}</Badge>
                       </TableCell>
-                      <TableCell className="text-center text-xs max-w-[120px] truncate">
+                      <TableCell className="text-center text-xs max-w-[160px]">
                         {isEditing ? (
                           <Input
                             className="w-full h-7 text-xs"
-                            value={editValues.notes}
-                            onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))}
-                            placeholder="Observação..."
+                            value={editValues.justificativa}
+                            onChange={e => setEditValues(v => ({ ...v, justificativa: e.target.value }))}
+                            placeholder="Justificativa obrigatória..."
                           />
                         ) : (
-                          d.notes || '—'
+                          <span title={d.notes || ''}>{d.notes || '—'}</span>
                         )}
                       </TableCell>
                       {currentStatus !== 'fechado' && (
                         <TableCell className="text-center">
                           {isEditing ? (
                             <div className="flex gap-1 justify-center">
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d.id)}>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d)}>
                                 <Save className="w-3 h-3" />
                               </Button>
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}>
