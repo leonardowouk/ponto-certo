@@ -218,8 +218,10 @@ export function EmployeeReviewModal({
               <TableHeader>
                 <TableRow>
                   <TableHead>Dia</TableHead>
-                  <TableHead className="text-center">Batidas</TableHead>
-                  <TableHead className="text-center">Intervalo</TableHead>
+                  <TableHead className="text-center">Entrada</TableHead>
+                  <TableHead className="text-center">Saída Int.</TableHead>
+                  <TableHead className="text-center">Retorno Int.</TableHead>
+                  <TableHead className="text-center">Saída</TableHead>
                   <TableHead className="text-center">Trab.</TableHead>
                   <TableHead className="text-center">Esper.</TableHead>
                   <TableHead className="text-center">Saldo</TableHead>
@@ -231,36 +233,20 @@ export function EmployeeReviewModal({
               <TableBody>
                 {days.map((d) => {
                   const isEditing = editingDay === d.id;
-                  const intervals = d.punches.filter(p => p.punch_type === 'intervalo_inicio' || p.punch_type === 'intervalo_fim');
+                  const entrada = d.punches.find(p => p.punch_type === 'entrada');
+                  const intInicio = d.punches.find(p => p.punch_type === 'intervalo_inicio');
+                  const intFim = d.punches.find(p => p.punch_type === 'intervalo_fim');
+                  const saida = d.punches.find(p => p.punch_type === 'saida');
 
                   return (
                     <TableRow key={d.id}>
                       <TableCell className="whitespace-nowrap">
-                        {format(new Date(d.work_date + 'T12:00:00'), 'dd/MM (EEE)', { locale: ptBR })}
+                        {format(new Date(d.work_date + 'T12:00:00'), 'dd/MM/yyyy')}
                       </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex flex-wrap gap-1 justify-center">
-                          {d.punches.map(p => (
-                            <span key={p.id} className="text-[10px] bg-muted px-1 rounded" title={punchTypeLabel[p.punch_type]}>
-                              {punchTypeLabel[p.punch_type]} {formatTime(p.punched_at)}
-                            </span>
-                          ))}
-                          {d.punches.length === 0 && <span className="text-muted-foreground text-xs">—</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center text-xs">
-                        {intervals.length > 0 ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            {intervals.map(p => (
-                              <span key={p.id}>
-                                {p.punch_type === 'intervalo_inicio' ? '↓' : '↑'} {formatTime(p.punched_at)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          formatMinutes(d.break_minutes)
-                        )}
-                      </TableCell>
+                      <TableCell className="text-center">{formatTime(entrada?.punched_at || d.first_punch_at)}</TableCell>
+                      <TableCell className="text-center">{formatTime(intInicio?.punched_at || null)}</TableCell>
+                      <TableCell className="text-center">{formatTime(intFim?.punched_at || null)}</TableCell>
+                      <TableCell className="text-center">{formatTime(saida?.punched_at || d.last_punch_at)}</TableCell>
                       <TableCell className="text-center">
                         {isEditing ? (
                           <Input
@@ -321,7 +307,7 @@ export function EmployeeReviewModal({
               </TableBody>
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={3} className="text-right font-bold">TOTAIS:</TableCell>
+                  <TableCell colSpan={5} className="text-right font-bold">TOTAIS:</TableCell>
                   <TableCell className="text-center font-bold">{formatMinutes(totals.worked)}</TableCell>
                   <TableCell className="text-center font-bold">{formatMinutes(totals.expected)}</TableCell>
                   <TableCell className={`text-center font-bold ${totals.balance < 0 ? 'text-destructive' : ''}`}>
