@@ -1,137 +1,79 @@
 
 
-# Multi-Empresa: Admin Central Gerencia Tudo
+## Módulo de Fechamento Mensal
 
-## Resumo
+### Visão Geral
+Criar um módulo completo de fechamento mensal com 3 etapas: (1) tela de conferência/revisão por colaborador, (2) consolidação e fechamento, (3) geração de espelho para assinatura (PDF-like printable).
 
-Adicionar suporte a multiplas empresas no sistema, onde um super-admin central pode cadastrar empresas e alternar entre elas. Cada empresa tera seus proprios colaboradores, setores, dispositivos e configuracoes. Admins locais veem apenas dados da sua empresa.
+### Database
 
-## O que muda para voce
+Nova tabela `monthly_closings`:
+- `id` UUID PK
+- `company_id` UUID NOT NULL
+- `employee_id` UUID NOT NULL
+- `ref_month` DATE NOT NULL (primeiro dia do mês)
+- `total_worked_minutes` INT
+- `total_expected_minutes` INT
+- `total_balance_minutes` INT
+- `total_break_minutes` INT
+- `days_worked` INT
+- `days_absent` INT
+- `days_pending` INT
+- `status` ENUM (`pendente`, `conferido`, `fechado`) default `pendente`
+- `closed_by` UUID (user que fechou)
+- `closed_at` TIMESTAMPTZ
+- `reviewed_by` UUID
+- `reviewed_at` TIMESTAMPTZ
+- `notes` TEXT
+- `created_at` TIMESTAMPTZ default now()
+- UNIQUE(employee_id, ref_month)
 
-- Uma nova pagina "Empresas" no painel admin para cadastrar e gerenciar empresas
-- Um seletor de empresa no topo do painel para alternar entre elas
-- Cada empresa tem seus proprios colaboradores, setores, dispositivos e batidas
-- Um novo tipo de usuario "super_admin" que pode ver e gerenciar todas as empresas
+Enum: `closing_status` = pendente, conferido, fechado
 
-## Etapas de Implementacao
+RLS: admin/RH com filtro por company via employee join.
 
-### 1. Criar tabela `companies` e adicionar role `super_admin`
+### Frontend
 
-Nova tabela para armazenar empresas:
+**1. Nova página `src/pages/admin/MonthlyClosing.tsx`**
+- Rota: `/admin/closing`
+- Menu item no sidebar: "Fechamento Mensal" com ícone `FileCheck`
 
-```text
-companies
----------
-id (uuid, PK)
-nome (text)
-cnpj_hash (text, unique)  -- CNPJ hasheado para privacidade
-ativo (boolean, default true)
-created_at (timestamptz)
-```
+**2. Fluxo da página (3 estados):**
 
-Adicionar `company_id` nas tabelas existentes:
-- `employees` -- vincula colaborador a empresa
-- `sectors` -- vincula setor a empresa
-- `time_devices` -- vincula dispositivo a empresa
-- `time_punches` -- herda da batida
-- `timesheets_daily` -- herda do colaborador
-- `hour_bank_ledger` -- herda do colaborador
+**Estado 1 - Lista de conferência:**
+- Seletor de mês (reutiliza pattern do Timesheet)
+- Tabela com todos colaboradores da empresa e resumo mensal:
+  - Nome, Dias trabalhados, Horas trabalhadas, Horas esperadas, Saldo, Dias pendentes/revisão, Status do fechamento
+- Badge indicando status: `pendente` (amarelo), `conferido` (azul), `fechado` (verde)
+- Botão "Conferir" em cada linha para abrir a revisão detalhada
+- Botão "Fechar Mês" (só habilita quando todos estão `conferido`)
 
-Adicionar nova role `super_admin` ao enum `app_role`.
+**Estado 2 - Tela de conferência individual (modal ou drawer):**
+- Cabeçalho: Nome do colaborador, mês de referência
+- Tabela dia-a-dia com todas as batidas do mês (reutiliza dados de `timesheets_daily`)
+- Totais consolidados ao final
+- Botão "Marcar como Conferido" → atualiza status para `conferido`
+- Botão "Voltar à lista"
 
-Criar tabela `user_company_access` para vincular admins locais a empresas.
+**Estado 3 - Espelho para assinatura (print view):**
+- Botão "Gerar Espelho" por colaborador (após fechado)
+- Abre uma view printable (nova janela ou dialog full-screen) com:
+  - Cabeçalho: empresa, colaborador, mês
+  - Tabela de todos os dias do mês com batidas, trabalhado, esperado, saldo
+  - Totais no rodapé
+  - Linhas de assinatura: "Colaborador: ___" e "Responsável: ___"
+  - Botão "Imprimir" (window.print)
 
-### 2. Atualizar politicas RLS
+**3. Lógica de consolidação:**
+- Ao entrar na página, calcula o resumo mensal de cada colaborador a partir de `timesheets_daily`
+- Upsert no `monthly_closings` com os totais calculados
+- "Fechar Mês" marca todos como `fechado` e registra `closed_by` e `closed_at`
 
-- Admins locais so veem dados da(s) empresa(s) que tem acesso
-- Super-admins veem todas as empresas
-- Criar funcao `get_user_company_ids()` (security definer) que retorna IDs das empresas que o usuario pode acessar
-
-### 3. Criar pagina de Empresas no Admin
-
-- Listar, cadastrar e editar empresas
-- Apenas super_admin pode acessar
-- Campos: nome, CNPJ, status (ativo/inativo)
-
-### 4. Adicionar seletor de empresa no AdminLayout
-
-- Dropdown no header para alternar entre empresas
-- Armazenar empresa selecionada em estado (React Context)
-- Todas as queries filtram pela empresa selecionada
-
-### 5. Atualizar todas as paginas admin
-
-- Colaboradores, Setores, Dashboard, Timesheet, Banco de Horas e Configuracoes filtram por `company_id`
-- Formularios de cadastro enviam `company_id` automaticamente
-
-### 6. Atualizar Edge Functions
-
-- `ponto-validate`: incluir `company_id` ao registrar batidas
-- Dispositivos vinculados a empresa especifica
-
-### 7. Migrar dados existentes
-
-- Criar empresa padrao "Cookie do Boleta" (ou nome que preferir)
-- Vincular todos os registros existentes a essa empresa
-- Tornar o usuario Thiago um `super_admin`
-
----
-
-## Detalhes Tecnicos
-
-### Nova role no enum
-
-```sql
-ALTER TYPE public.app_role ADD VALUE 'super_admin';
-```
-
-### Tabela companies
-
-```sql
-CREATE TABLE public.companies (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  nome text NOT NULL,
-  cnpj_hash text UNIQUE,
-  ativo boolean DEFAULT true,
-  created_at timestamptz DEFAULT now()
-);
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-```
-
-### Coluna company_id nas tabelas existentes
-
-```sql
-ALTER TABLE employees ADD COLUMN company_id uuid REFERENCES companies(id);
-ALTER TABLE sectors ADD COLUMN company_id uuid REFERENCES companies(id);
-ALTER TABLE time_devices ADD COLUMN company_id uuid REFERENCES companies(id);
-```
-
-### Tabela de acesso por empresa
-
-```sql
-CREATE TABLE public.user_company_access (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  company_id uuid NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  UNIQUE(user_id, company_id)
-);
-```
-
-### React Context para empresa ativa
-
-Um `CompanyContext` sera criado para compartilhar a empresa selecionada entre todas as paginas admin, evitando passar props manualmente.
-
-### Arquivos que serao modificados
-
-- `src/components/admin/AdminLayout.tsx` -- seletor de empresa + context provider
-- `src/pages/admin/Employees.tsx` -- filtro por company_id
-- `src/pages/admin/Sectors.tsx` -- filtro por company_id
-- `src/pages/admin/Dashboard.tsx` -- filtro por company_id
-- `src/pages/admin/Timesheet.tsx` -- filtro por company_id
-- `src/pages/admin/HourBank.tsx` -- filtro por company_id
-- `src/pages/admin/Settings.tsx` -- configuracoes por empresa
-- `supabase/functions/ponto-validate/index.ts` -- company_id nas batidas
-- **Novo:** `src/pages/admin/Companies.tsx`
-- **Novo:** `src/contexts/CompanyContext.tsx`
-- **Novo:** `src/App.tsx` -- rota /admin/companies
+### Arquivos a criar/editar:
+1. **Migração SQL**: criar enum `closing_status` e tabela `monthly_closings` com RLS
+2. **`src/pages/admin/MonthlyClosing.tsx`**: página principal com lista + conferência + espelho
+3. **`src/components/admin/EmployeeReviewModal.tsx`**: modal de conferência individual
+4. **`src/components/admin/TimesheetPrintView.tsx`**: componente de espelho para impressão
+5. **`src/App.tsx`**: adicionar rota `/admin/closing`
+6. **`src/components/admin/AdminLayout.tsx`**: adicionar item de menu "Fechamento"
 
