@@ -85,7 +85,10 @@ export function TimesheetPrintView({ employeeName, companyName, refMonth, days, 
           <thead>
             <tr className="bg-muted/50">
               <th className="border p-1 text-left">Dia</th>
-              <th className="border p-1 text-left">Sem</th>
+              <th className="border p-1 text-center">Entrada</th>
+              <th className="border p-1 text-center">Saída Int.</th>
+              <th className="border p-1 text-center">Retorno Int.</th>
+              <th className="border p-1 text-center">Saída</th>
               <th className="border p-1 text-center">Entrada</th>
               <th className="border p-1 text-center">Int. Início</th>
               <th className="border p-1 text-center">Int. Fim</th>
@@ -106,8 +109,7 @@ export function TimesheetPrintView({ employeeName, companyName, refMonth, days, 
 
               return (
                 <tr key={d.work_date} className="even:bg-muted/20">
-                  <td className="border p-1">{format(new Date(d.work_date + 'T12:00:00'), 'dd/MM')}</td>
-                  <td className="border p-1 capitalize">{weekday(d.work_date)}</td>
+                <td className="border p-1">{format(new Date(d.work_date + 'T12:00:00'), 'dd/MM/yyyy')}</td>
                   <td className="border p-1 text-center">{formatTime(entrada?.punched_at || d.first_punch_at)}</td>
                   <td className="border p-1 text-center">{formatTime(intInicio?.punched_at || null)}</td>
                   <td className="border p-1 text-center">{formatTime(intFim?.punched_at || null)}</td>
@@ -124,7 +126,7 @@ export function TimesheetPrintView({ employeeName, companyName, refMonth, days, 
           </tbody>
           <tfoot>
             <tr className="font-bold bg-muted/50">
-              <td colSpan={6} className="border p-1 text-right">TOTAIS:</td>
+              <td colSpan={5} className="border p-1 text-right">TOTAIS:</td>
               <td className="border p-1 text-center">{formatMinutes(totals.worked)}</td>
               <td className="border p-1 text-center">{formatMinutes(totals.expected)}</td>
               <td className={`border p-1 text-center ${totals.balance < 0 ? 'text-destructive' : ''}`}>
