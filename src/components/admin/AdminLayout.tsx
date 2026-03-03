@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { 
   Clock, Users, CalendarDays, Wallet, LayoutDashboard,
-  Settings, LogOut, Loader2, Building2, Building, FileCheck
+  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield
 } from 'lucide-react';
 import { CompanyProvider, useCompany } from '@/contexts/CompanyContext';
 
@@ -71,6 +71,7 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
     { id: 'timesheet', label: 'Espelho de Ponto', icon: CalendarDays, href: '/admin/timesheet' },
     { id: 'hourbank', label: 'Banco de Horas', icon: Wallet, href: '/admin/hourbank' },
     { id: 'closing', label: 'Fechamento Mensal', icon: FileCheck, href: '/admin/closing' },
+    { id: 'users', label: 'Usuários', icon: Shield, href: '/admin/users' },
     { id: 'settings', label: 'Configurações', icon: Settings, href: '/admin/settings' },
     ...(isSuperAdmin ? [{ id: 'companies', label: 'Empresas', icon: Building, href: '/admin/companies' }] : []),
   ];
