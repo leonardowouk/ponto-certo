@@ -228,6 +228,84 @@ export type Database = {
           },
         ]
       }
+      monthly_closings: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          company_id: string
+          created_at: string | null
+          days_absent: number | null
+          days_pending: number | null
+          days_worked: number | null
+          employee_id: string
+          id: string
+          notes: string | null
+          ref_month: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["closing_status"]
+          total_balance_minutes: number | null
+          total_break_minutes: number | null
+          total_expected_minutes: number | null
+          total_worked_minutes: number | null
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          company_id: string
+          created_at?: string | null
+          days_absent?: number | null
+          days_pending?: number | null
+          days_worked?: number | null
+          employee_id: string
+          id?: string
+          notes?: string | null
+          ref_month: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["closing_status"]
+          total_balance_minutes?: number | null
+          total_break_minutes?: number | null
+          total_expected_minutes?: number | null
+          total_worked_minutes?: number | null
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          company_id?: string
+          created_at?: string | null
+          days_absent?: number | null
+          days_pending?: number | null
+          days_worked?: number | null
+          employee_id?: string
+          id?: string
+          notes?: string | null
+          ref_month?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["closing_status"]
+          total_balance_minutes?: number | null
+          total_break_minutes?: number | null
+          total_expected_minutes?: number | null
+          total_worked_minutes?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_closings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monthly_closings_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sector_schedules: {
         Row: {
           break_minutes: number | null
@@ -577,6 +655,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "rh" | "gestor" | "colaborador" | "super_admin"
       approval_status: "aprovado" | "pendente" | "rejeitado"
+      closing_status: "pendente" | "conferido" | "fechado"
       hour_bank_source:
         | "automatico"
         | "ajuste_manual"
@@ -716,6 +795,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "rh", "gestor", "colaborador", "super_admin"],
       approval_status: ["aprovado", "pendente", "rejeitado"],
+      closing_status: ["pendente", "conferido", "fechado"],
       hour_bank_source: [
         "automatico",
         "ajuste_manual",
