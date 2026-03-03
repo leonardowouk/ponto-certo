@@ -14,6 +14,7 @@ import HourBank from "./pages/admin/HourBank";
 import Settings from "./pages/admin/Settings";
 import Companies from "./pages/admin/Companies";
 import MonthlyClosing from "./pages/admin/MonthlyClosing";
+import Users from "./pages/admin/Users";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
 
@@ -30,6 +31,7 @@ const AdminRoutes = () => (
       <Route path="/settings" element={<Settings />} />
       <Route path="/companies" element={<Companies />} />
       <Route path="/closing" element={<MonthlyClosing />} />
+      <Route path="/users" element={<Users />} />
     </Routes>
   </CompanyProvider>
 );
