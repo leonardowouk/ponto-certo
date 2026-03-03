@@ -665,7 +665,13 @@ export type Database = {
       punch_status: "ok" | "suspeito" | "ajustado" | "pendente"
       punch_type: "entrada" | "saida" | "intervalo_inicio" | "intervalo_fim"
       schedule_type: "fixa" | "flexivel" | "escala"
-      timesheet_status: "ok" | "pendente" | "revisao" | "ajustado" | "falta"
+      timesheet_status:
+        | "ok"
+        | "pendente"
+        | "revisao"
+        | "ajustado"
+        | "falta"
+        | "abono"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -806,7 +812,14 @@ export const Constants = {
       punch_status: ["ok", "suspeito", "ajustado", "pendente"],
       punch_type: ["entrada", "saida", "intervalo_inicio", "intervalo_fim"],
       schedule_type: ["fixa", "flexivel", "escala"],
-      timesheet_status: ["ok", "pendente", "revisao", "ajustado", "falta"],
+      timesheet_status: [
+        "ok",
+        "pendente",
+        "revisao",
+        "ajustado",
+        "falta",
+        "abono",
+      ],
     },
   },
 } as const
