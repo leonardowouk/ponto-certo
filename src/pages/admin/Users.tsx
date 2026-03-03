@@ -63,6 +63,7 @@ export default function UsersPage() {
     role: 'admin',
     company_ids: [] as string[],
   });
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -70,15 +71,18 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const { data, error } = await supabase.functions.invoke('manage-admin-users', {
         body: { action: 'list' },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       setUsers(data.users || []);
     } catch (error) {
       console.error('Error loading users:', error);
-      toast({ title: 'Erro', description: 'Erro ao carregar usuários', variant: 'destructive' });
+      setLoadError(true);
+      toast({ title: 'Erro', description: 'Erro ao carregar usuários. Tente novamente.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -199,6 +203,13 @@ export default function UsersPage() {
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : loadError ? (
+              <div className="text-center py-12 space-y-3">
+                <p className="text-muted-foreground">Erro ao carregar usuários</p>
+                <Button variant="outline" onClick={loadUsers}>
+                  Tentar novamente
+                </Button>
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
