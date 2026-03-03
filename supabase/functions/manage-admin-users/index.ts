@@ -39,11 +39,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const isSuperAdmin = callerRoles?.some(r => r.role === "super_admin");
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action") || (await req.json().catch(() => ({})))?.action;
-
-    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const body = await req.json().catch(() => ({}));
+    const action = body.action;
 
     if (action === "list") {
       // Get all users with admin/rh/gestor roles
