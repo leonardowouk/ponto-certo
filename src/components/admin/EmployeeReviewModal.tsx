@@ -297,8 +297,35 @@ export function EmployeeReviewModal({
     });
   };
 
+  const startEditMissing = (day: DayWithPunches) => {
+    setEditingDay(day.id);
+    setEditValues({
+      entrada: '',
+      saidaInt: '',
+      retornoInt: '',
+      saida: '',
+      justificativa: '',
+    });
+  };
+
   const cancelEdit = () => {
     setEditingDay(null);
+  };
+
+  const calculateMinutesFromTimes = (entrada: string, saida: string, saidaInt: string, retornoInt: string): { worked: number; breaks: number } => {
+    if (!entrada || !saida) return { worked: 0, breaks: 0 };
+    const [eh, em] = entrada.split(':').map(Number);
+    const [sh, sm] = saida.split(':').map(Number);
+    const totalMinutes = (sh * 60 + sm) - (eh * 60 + em);
+    
+    let breakMinutes = 0;
+    if (saidaInt && retornoInt) {
+      const [ih, im] = saidaInt.split(':').map(Number);
+      const [rh, rm] = retornoInt.split(':').map(Number);
+      breakMinutes = (rh * 60 + rm) - (ih * 60 + im);
+    }
+    
+    return { worked: Math.max(0, totalMinutes - breakMinutes), breaks: Math.max(0, breakMinutes) };
   };
 
   const saveEdit = async (day: DayWithPunches) => {
@@ -307,11 +334,62 @@ export function EmployeeReviewModal({
       return;
     }
 
+    if (!editValues.entrada && !editValues.saida) {
+      toast({ title: 'Informe ao menos entrada e saída', variant: 'destructive' });
+      return;
+    }
+
     const toIso = (time: string) => {
       if (!time) return null;
       return `${day.work_date}T${time}:00`;
     };
 
+    const newNote = `[Ajuste] ${editValues.justificativa.trim()}`;
+
+    if (day.isMissing) {
+      // Create new timesheet record for missing day with manual times
+      const { worked, breaks } = calculateMinutesFromTimes(editValues.entrada, editValues.saida, editValues.saidaInt, editValues.retornoInt);
+      
+      // Get expected minutes from schedule
+      const { data: ws } = await supabase
+        .from('work_schedules')
+        .select('expected_start, expected_end, break_minutes')
+        .eq('employee_id', employeeId)
+        .maybeSingle();
+      
+      let expectedMinutes = 0;
+      if (ws?.expected_start && ws?.expected_end) {
+        const [sh, sm] = ws.expected_start.split(':').map(Number);
+        const [eh, em] = ws.expected_end.split(':').map(Number);
+        expectedMinutes = (eh * 60 + em) - (sh * 60 + sm) - (ws.break_minutes || 0);
+      }
+
+      const { error } = await supabase
+        .from('timesheets_daily')
+        .insert({
+          employee_id: employeeId,
+          work_date: day.work_date,
+          first_punch_at: toIso(editValues.entrada),
+          last_punch_at: toIso(editValues.saida),
+          worked_minutes: worked,
+          break_minutes: breaks,
+          expected_minutes: expectedMinutes,
+          balance_minutes: worked - expectedMinutes,
+          status: 'ajustado' as any,
+          notes: newNote,
+        });
+
+      if (error) {
+        toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Horário registrado!' });
+        setEditingDay(null);
+        loadDays();
+      }
+      return;
+    }
+
+    // Existing day: update punches
     const punchUpdates = [
       { type: 'entrada', time: toIso(editValues.entrada), existingId: day.punches.find(p => p.punch_type === 'entrada')?.id },
       { type: 'intervalo_inicio', time: toIso(editValues.saidaInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_inicio')?.id },
@@ -330,14 +408,26 @@ export function EmployeeReviewModal({
       }
     }
 
+    // Recalculate worked minutes if entry/exit provided
+    const { worked, breaks } = calculateMinutesFromTimes(editValues.entrada, editValues.saida, editValues.saidaInt, editValues.retornoInt);
+
     const existingNotes = day.notes || '';
-    const newNote = `[Ajuste] ${editValues.justificativa.trim()}`;
+    const updateData: Record<string, any> = {
+      notes: existingNotes ? `${existingNotes} | ${newNote}` : newNote,
+      status: 'ajustado' as any,
+    };
+
+    if (editValues.entrada) updateData.first_punch_at = toIso(editValues.entrada);
+    if (editValues.saida) updateData.last_punch_at = toIso(editValues.saida);
+    if (editValues.entrada && editValues.saida) {
+      updateData.worked_minutes = worked;
+      updateData.break_minutes = breaks;
+      updateData.balance_minutes = worked - (day.expected_minutes || 0);
+    }
+
     const { error } = await supabase
       .from('timesheets_daily')
-      .update({
-        notes: existingNotes ? `${existingNotes} | ${newNote}` : newNote,
-        status: 'ajustado' as any,
-      })
+      .update(updateData)
       .eq('id', day.id);
 
     if (error || hasError) {
@@ -474,11 +564,28 @@ export function EmployeeReviewModal({
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        {showResolution ? (
+                        {isEditing ? (
+                          <div className="space-y-1">
+                            <Input
+                              placeholder="Justificativa *"
+                              className="h-7 text-xs w-32 mx-auto"
+                              value={editValues.justificativa}
+                              onChange={e => setEditValues(v => ({ ...v, justificativa: e.target.value }))}
+                            />
+                            <div className="flex gap-1 justify-center">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d)}>
+                                <Save className="w-3 h-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}>
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ) : showResolution ? (
                           savingMissing === d.work_date ? (
                             <Loader2 className="w-4 h-4 animate-spin mx-auto" />
                           ) : (
-                            <div className="flex gap-1 justify-center">
+                            <div className="flex gap-1 justify-center flex-wrap">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -495,17 +602,17 @@ export function EmployeeReviewModal({
                               >
                                 Abono
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs px-2"
+                                onClick={() => d.isMissing ? startEditMissing(d) : startEdit(d)}
+                              >
+                                <Pencil className="w-3 h-3 mr-1" />
+                                Editar
+                              </Button>
                             </div>
                           )
-                        ) : isEditing ? (
-                          <div className="flex gap-1 justify-center">
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d)}>
-                              <Save className="w-3 h-3" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}>
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
                         ) : !isReadOnly && !d.isMissing ? (
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
                             <Pencil className="w-3 h-3" />
