@@ -4,10 +4,32 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2, Pencil, Save, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
+interface Punch {
+  id: string;
+  punch_type: string;
+  punched_at: string;
+  status: string;
+}
+
+interface DayWithPunches {
+  id: string;
+  work_date: string;
+  first_punch_at: string | null;
+  last_punch_at: string | null;
+  worked_minutes: number | null;
+  expected_minutes: number | null;
+  balance_minutes: number | null;
+  break_minutes: number | null;
+  status: string | null;
+  notes: string | null;
+  punches: Punch[];
+}
 
 interface EmployeeReviewModalProps {
   open: boolean;
@@ -32,6 +54,13 @@ const formatTime = (iso: string | null) => {
   return format(new Date(iso), 'HH:mm');
 };
 
+const punchTypeLabel: Record<string, string> = {
+  entrada: 'Ent.',
+  saida: 'Saí.',
+  intervalo_inicio: 'Int.↓',
+  intervalo_fim: 'Int.↑',
+};
+
 const statusBadge = (s: string | null) => {
   const map: Record<string, string> = {
     ok: 'bg-green-100 text-green-800',
@@ -46,9 +75,11 @@ const statusBadge = (s: string | null) => {
 export function EmployeeReviewModal({
   open, onClose, employeeId, employeeName, refMonth, companyId, currentStatus, onStatusChanged
 }: EmployeeReviewModalProps) {
-  const [days, setDays] = useState<any[]>([]);
+  const [days, setDays] = useState<DayWithPunches[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingDay, setEditingDay] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<{ worked: string; expected: string; notes: string }>({ worked: '', expected: '', notes: '' });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -60,7 +91,8 @@ export function EmployeeReviewModal({
     const startDate = format(refMonth, 'yyyy-MM-dd');
     const endDate = format(new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0), 'yyyy-MM-dd');
 
-    const { data, error } = await supabase
+    // Load timesheets
+    const { data: tsData } = await supabase
       .from('timesheets_daily')
       .select('*')
       .eq('employee_id', employeeId)
@@ -68,8 +100,29 @@ export function EmployeeReviewModal({
       .lte('work_date', endDate)
       .order('work_date', { ascending: true });
 
-    if (error) console.error(error);
-    setDays(data || []);
+    // Load all punches for the month
+    const { data: punchData } = await supabase
+      .from('time_punches')
+      .select('id, punch_type, punched_at, status')
+      .eq('employee_id', employeeId)
+      .gte('punched_at', startDate + 'T00:00:00')
+      .lte('punched_at', endDate + 'T23:59:59')
+      .order('punched_at', { ascending: true });
+
+    // Group punches by date
+    const punchMap = new Map<string, Punch[]>();
+    (punchData || []).forEach(p => {
+      const date = format(new Date(p.punched_at), 'yyyy-MM-dd');
+      if (!punchMap.has(date)) punchMap.set(date, []);
+      punchMap.get(date)!.push(p as Punch);
+    });
+
+    const daysWithPunches: DayWithPunches[] = (tsData || []).map(d => ({
+      ...d,
+      punches: punchMap.get(d.work_date) || [],
+    }));
+
+    setDays(daysWithPunches);
     setLoading(false);
   };
 
@@ -82,6 +135,44 @@ export function EmployeeReviewModal({
     }),
     { worked: 0, expected: 0, balance: 0, breaks: 0 }
   );
+
+  const startEdit = (day: DayWithPunches) => {
+    setEditingDay(day.id);
+    setEditValues({
+      worked: String(day.worked_minutes || 0),
+      expected: String(day.expected_minutes || 0),
+      notes: day.notes || '',
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingDay(null);
+  };
+
+  const saveEdit = async (dayId: string) => {
+    const worked = parseInt(editValues.worked) || 0;
+    const expected = parseInt(editValues.expected) || 0;
+    const balance = worked - expected;
+
+    const { error } = await supabase
+      .from('timesheets_daily')
+      .update({
+        worked_minutes: worked,
+        expected_minutes: expected,
+        balance_minutes: balance,
+        notes: editValues.notes || null,
+        status: 'ajustado' as any,
+      })
+      .eq('id', dayId);
+
+    if (error) {
+      toast({ title: 'Erro ao salvar ajuste', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Ajuste salvo!' });
+      setEditingDay(null);
+      loadDays();
+    }
+  };
 
   const handleMarkReviewed = async () => {
     setSaving(true);
@@ -111,7 +202,7 @@ export function EmployeeReviewModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto">
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Conferência — {employeeName}</DialogTitle>
           <p className="text-sm text-muted-foreground">
@@ -127,32 +218,106 @@ export function EmployeeReviewModal({
               <TableHeader>
                 <TableRow>
                   <TableHead>Dia</TableHead>
-                  <TableHead className="text-center">Entrada</TableHead>
-                  <TableHead className="text-center">Saída</TableHead>
+                  <TableHead className="text-center">Batidas</TableHead>
+                  <TableHead className="text-center">Intervalo</TableHead>
                   <TableHead className="text-center">Trab.</TableHead>
                   <TableHead className="text-center">Esper.</TableHead>
                   <TableHead className="text-center">Saldo</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Obs.</TableHead>
+                  {currentStatus !== 'fechado' && <TableHead className="text-center w-16"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {days.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell>
-                      {format(new Date(d.work_date + 'T12:00:00'), 'dd/MM (EEE)', { locale: ptBR })}
-                    </TableCell>
-                    <TableCell className="text-center">{formatTime(d.first_punch_at)}</TableCell>
-                    <TableCell className="text-center">{formatTime(d.last_punch_at)}</TableCell>
-                    <TableCell className="text-center">{formatMinutes(d.worked_minutes)}</TableCell>
-                    <TableCell className="text-center">{formatMinutes(d.expected_minutes)}</TableCell>
-                    <TableCell className={`text-center ${(d.balance_minutes ?? 0) < 0 ? 'text-destructive' : ''}`}>
-                      {formatMinutes(d.balance_minutes)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge className={statusBadge(d.status)}>{d.status || '-'}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {days.map((d) => {
+                  const isEditing = editingDay === d.id;
+                  const intervals = d.punches.filter(p => p.punch_type === 'intervalo_inicio' || p.punch_type === 'intervalo_fim');
+
+                  return (
+                    <TableRow key={d.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {format(new Date(d.work_date + 'T12:00:00'), 'dd/MM (EEE)', { locale: ptBR })}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex flex-wrap gap-1 justify-center">
+                          {d.punches.map(p => (
+                            <span key={p.id} className="text-[10px] bg-muted px-1 rounded" title={punchTypeLabel[p.punch_type]}>
+                              {punchTypeLabel[p.punch_type]} {formatTime(p.punched_at)}
+                            </span>
+                          ))}
+                          {d.punches.length === 0 && <span className="text-muted-foreground text-xs">—</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center text-xs">
+                        {intervals.length > 0 ? (
+                          <div className="flex flex-col items-center gap-0.5">
+                            {intervals.map(p => (
+                              <span key={p.id}>
+                                {p.punch_type === 'intervalo_inicio' ? '↓' : '↑'} {formatTime(p.punched_at)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          formatMinutes(d.break_minutes)
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isEditing ? (
+                          <Input
+                            type="number" className="w-16 h-7 text-xs text-center mx-auto"
+                            value={editValues.worked}
+                            onChange={e => setEditValues(v => ({ ...v, worked: e.target.value }))}
+                          />
+                        ) : formatMinutes(d.worked_minutes)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isEditing ? (
+                          <Input
+                            type="number" className="w-16 h-7 text-xs text-center mx-auto"
+                            value={editValues.expected}
+                            onChange={e => setEditValues(v => ({ ...v, expected: e.target.value }))}
+                          />
+                        ) : formatMinutes(d.expected_minutes)}
+                      </TableCell>
+                      <TableCell className={`text-center ${(d.balance_minutes ?? 0) < 0 ? 'text-destructive' : ''}`}>
+                        {formatMinutes(d.balance_minutes)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={statusBadge(d.status)}>{d.status || '-'}</Badge>
+                      </TableCell>
+                      <TableCell className="text-center text-xs max-w-[120px] truncate">
+                        {isEditing ? (
+                          <Input
+                            className="w-full h-7 text-xs"
+                            value={editValues.notes}
+                            onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))}
+                            placeholder="Observação..."
+                          />
+                        ) : (
+                          d.notes || '—'
+                        )}
+                      </TableCell>
+                      {currentStatus !== 'fechado' && (
+                        <TableCell className="text-center">
+                          {isEditing ? (
+                            <div className="flex gap-1 justify-center">
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => saveEdit(d.id)}>
+                                <Save className="w-3 h-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={cancelEdit}>
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(d)}>
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
               <TableFooter>
                 <TableRow>
@@ -162,7 +327,7 @@ export function EmployeeReviewModal({
                   <TableCell className={`text-center font-bold ${totals.balance < 0 ? 'text-destructive' : ''}`}>
                     {formatMinutes(totals.balance)}
                   </TableCell>
-                  <TableCell />
+                  <TableCell colSpan={currentStatus !== 'fechado' ? 3 : 2} />
                 </TableRow>
               </TableFooter>
             </Table>

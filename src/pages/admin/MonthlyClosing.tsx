@@ -13,7 +13,7 @@ import { TimesheetPrintView } from '@/components/admin/TimesheetPrintView';
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Loader2, FileCheck, Lock, Eye, Printer } from 'lucide-react';
+import { Loader2, FileCheck, Lock, Eye, Printer, Unlock, Pencil } from 'lucide-react';
 
 interface ClosingSummary {
   employeeId: string;
@@ -204,10 +204,47 @@ export default function MonthlyClosing() {
     setClosingAll(false);
   };
 
+  const handleReopenMonth = async () => {
+    const { error } = await supabase
+      .from('monthly_closings' as any)
+      .update({
+        status: 'conferido',
+        closed_by: null,
+        closed_at: null,
+      })
+      .eq('company_id', selectedCompanyId)
+      .eq('ref_month', selectedMonth)
+      .eq('status', 'fechado');
+
+    if (error) {
+      toast({ title: 'Erro ao reabrir', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Mês reaberto!', description: 'Os fechamentos voltaram para status conferido.' });
+      loadData();
+    }
+  };
+
+  const handleReopenEmployee = async (employeeId: string) => {
+    const { error } = await supabase
+      .from('monthly_closings' as any)
+      .update({ status: 'pendente', reviewed_by: null, reviewed_at: null })
+      .eq('employee_id', employeeId)
+      .eq('ref_month', selectedMonth)
+      .eq('company_id', selectedCompanyId);
+
+    if (error) {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Reaberto para revisão' });
+      loadData();
+    }
+  };
+
   const handleOpenPrint = async (empId: string, empName: string) => {
     const startDate = selectedMonth;
     const endDate = format(new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0), 'yyyy-MM-dd');
 
+    // Load timesheets
     const { data } = await supabase
       .from('timesheets_daily')
       .select('*')
@@ -216,7 +253,23 @@ export default function MonthlyClosing() {
       .lte('work_date', endDate)
       .order('work_date', { ascending: true });
 
-    const days = data || [];
+    // Load punches
+    const { data: punchData } = await supabase
+      .from('time_punches')
+      .select('id, punch_type, punched_at, status')
+      .eq('employee_id', empId)
+      .gte('punched_at', startDate + 'T00:00:00')
+      .lte('punched_at', endDate + 'T23:59:59')
+      .order('punched_at', { ascending: true });
+
+    const punchMap = new Map<string, any[]>();
+    (punchData || []).forEach(p => {
+      const date = format(new Date(p.punched_at), 'yyyy-MM-dd');
+      if (!punchMap.has(date)) punchMap.set(date, []);
+      punchMap.get(date)!.push(p);
+    });
+
+    const days = (data || []).map(d => ({ ...d, punches: punchMap.get(d.work_date) || [] }));
     const totals = days.reduce(
       (acc, d) => ({
         worked: acc.worked + (d.worked_minutes || 0),
@@ -261,6 +314,12 @@ export default function MonthlyClosing() {
                   Fechar Mês
                 </Button>
               )}
+              {allClosed && (
+                <Button variant="outline" onClick={handleReopenMonth}>
+                  <Unlock className="w-4 h-4 mr-1" />
+                  Reabrir Mês
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -303,21 +362,28 @@ export default function MonthlyClosing() {
                           <Badge className={cfg.className}>{cfg.label}</Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex justify-center gap-1">
-                            {s.status !== 'fechado' && (
-                              <Button
-                                size="sm" variant="outline"
-                                onClick={() => setReviewEmployee({ id: s.employeeId, name: s.employeeName, status: s.status })}
-                              >
-                                <Eye className="w-3 h-3 mr-1" />Conferir
-                              </Button>
-                            )}
-                            {s.status === 'fechado' && (
+                          <div className="flex justify-center gap-1 flex-wrap">
+                            <Button
+                              size="sm" variant="outline"
+                              onClick={() => setReviewEmployee({ id: s.employeeId, name: s.employeeName, status: s.status })}
+                            >
+                              {s.status === 'fechado' ? <Eye className="w-3 h-3 mr-1" /> : <Pencil className="w-3 h-3 mr-1" />}
+                              {s.status === 'fechado' ? 'Ver' : 'Conferir'}
+                            </Button>
+                            {(s.status === 'fechado' || s.status === 'conferido') && (
                               <Button
                                 size="sm" variant="outline"
                                 onClick={() => handleOpenPrint(s.employeeId, s.employeeName)}
                               >
                                 <Printer className="w-3 h-3 mr-1" />Espelho
+                              </Button>
+                            )}
+                            {s.status === 'conferido' && (
+                              <Button
+                                size="sm" variant="ghost"
+                                onClick={() => handleReopenEmployee(s.employeeId)}
+                              >
+                                <Unlock className="w-3 h-3 mr-1" />Reabrir
                               </Button>
                             )}
                           </div>

@@ -3,6 +3,12 @@ import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Printer, X } from 'lucide-react';
 
+interface Punch {
+  id: string;
+  punch_type: string;
+  punched_at: string;
+}
+
 interface DayRecord {
   work_date: string;
   first_punch_at: string | null;
@@ -12,6 +18,7 @@ interface DayRecord {
   balance_minutes: number | null;
   break_minutes: number | null;
   status: string | null;
+  punches?: Punch[];
 }
 
 interface TimesheetPrintViewProps {
@@ -32,9 +39,7 @@ const formatMinutes = (m: number | null) => {
   if (m === null || m === undefined) return '00:00';
   const sign = m < 0 ? '-' : '';
   const abs = Math.abs(m);
-  const h = Math.floor(abs / 60);
-  const min = abs % 60;
-  return `${sign}${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
 };
 
 const formatTime = (iso: string | null) => {
@@ -45,6 +50,13 @@ const formatTime = (iso: string | null) => {
 const weekday = (dateStr: string) => {
   const d = new Date(dateStr + 'T12:00:00');
   return format(d, 'EEE', { locale: ptBR });
+};
+
+const punchTypeLabel: Record<string, string> = {
+  entrada: 'Ent',
+  saida: 'Saí',
+  intervalo_inicio: 'Int↓',
+  intervalo_fim: 'Int↑',
 };
 
 export function TimesheetPrintView({ employeeName, companyName, refMonth, days, totals, onClose }: TimesheetPrintViewProps) {
@@ -75,6 +87,8 @@ export function TimesheetPrintView({ employeeName, companyName, refMonth, days, 
               <th className="border p-1 text-left">Dia</th>
               <th className="border p-1 text-left">Sem</th>
               <th className="border p-1 text-center">Entrada</th>
+              <th className="border p-1 text-center">Int. Início</th>
+              <th className="border p-1 text-center">Int. Fim</th>
               <th className="border p-1 text-center">Saída</th>
               <th className="border p-1 text-center">Trab.</th>
               <th className="border p-1 text-center">Esper.</th>
@@ -83,24 +97,34 @@ export function TimesheetPrintView({ employeeName, companyName, refMonth, days, 
             </tr>
           </thead>
           <tbody>
-            {days.map((d) => (
-              <tr key={d.work_date} className="even:bg-muted/20">
-                <td className="border p-1">{format(new Date(d.work_date + 'T12:00:00'), 'dd/MM')}</td>
-                <td className="border p-1 capitalize">{weekday(d.work_date)}</td>
-                <td className="border p-1 text-center">{formatTime(d.first_punch_at)}</td>
-                <td className="border p-1 text-center">{formatTime(d.last_punch_at)}</td>
-                <td className="border p-1 text-center">{formatMinutes(d.worked_minutes)}</td>
-                <td className="border p-1 text-center">{formatMinutes(d.expected_minutes)}</td>
-                <td className={`border p-1 text-center ${(d.balance_minutes ?? 0) < 0 ? 'text-destructive' : ''}`}>
-                  {formatMinutes(d.balance_minutes)}
-                </td>
-                <td className="border p-1 text-center capitalize">{d.status || '-'}</td>
-              </tr>
-            ))}
+            {days.map((d) => {
+              const punches = d.punches || [];
+              const entrada = punches.find(p => p.punch_type === 'entrada');
+              const intInicio = punches.find(p => p.punch_type === 'intervalo_inicio');
+              const intFim = punches.find(p => p.punch_type === 'intervalo_fim');
+              const saida = punches.find(p => p.punch_type === 'saida');
+
+              return (
+                <tr key={d.work_date} className="even:bg-muted/20">
+                  <td className="border p-1">{format(new Date(d.work_date + 'T12:00:00'), 'dd/MM')}</td>
+                  <td className="border p-1 capitalize">{weekday(d.work_date)}</td>
+                  <td className="border p-1 text-center">{formatTime(entrada?.punched_at || d.first_punch_at)}</td>
+                  <td className="border p-1 text-center">{formatTime(intInicio?.punched_at || null)}</td>
+                  <td className="border p-1 text-center">{formatTime(intFim?.punched_at || null)}</td>
+                  <td className="border p-1 text-center">{formatTime(saida?.punched_at || d.last_punch_at)}</td>
+                  <td className="border p-1 text-center">{formatMinutes(d.worked_minutes)}</td>
+                  <td className="border p-1 text-center">{formatMinutes(d.expected_minutes)}</td>
+                  <td className={`border p-1 text-center ${(d.balance_minutes ?? 0) < 0 ? 'text-destructive' : ''}`}>
+                    {formatMinutes(d.balance_minutes)}
+                  </td>
+                  <td className="border p-1 text-center capitalize">{d.status || '-'}</td>
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot>
             <tr className="font-bold bg-muted/50">
-              <td colSpan={4} className="border p-1 text-right">TOTAIS:</td>
+              <td colSpan={6} className="border p-1 text-right">TOTAIS:</td>
               <td className="border p-1 text-center">{formatMinutes(totals.worked)}</td>
               <td className="border p-1 text-center">{formatMinutes(totals.expected)}</td>
               <td className={`border p-1 text-center ${totals.balance < 0 ? 'text-destructive' : ''}`}>
