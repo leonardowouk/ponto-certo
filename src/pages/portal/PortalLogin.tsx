@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Clock, Mail, Lock, Loader2, User, KeyRound } from 'lucide-react';
-import { hashCPF, hashPIN } from '@/lib/hash';
+import { hashCPF } from '@/lib/hash';
 
 export default function PortalLogin() {
   const [tab, setTab] = useState<'login' | 'register'>('login');
