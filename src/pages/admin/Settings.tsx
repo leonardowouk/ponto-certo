@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Settings as SettingsIcon, Tablet, Shield, Clock } from 'lucide-react';
+import { ZApiSettings } from '@/components/admin/ZApiSettings';
 
 export default function SettingsPage() {
   const { toast } = useToast();
