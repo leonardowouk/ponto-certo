@@ -38,8 +38,14 @@ serve(async (req) => {
       });
     }
 
-    // Verify PIN
-    if (employee.pin_hash !== pin_hash) {
+    // Verify PIN (salted hash format: saltHex:hashHex)
+    const [storedSalt, storedHash] = employee.pin_hash.split(':');
+    const encoder = new TextEncoder();
+    const pinData = encoder.encode(storedSalt + pin);
+    const pinBuffer = await crypto.subtle.digest('SHA-256', pinData);
+    const pinHashCalc = Array.from(new Uint8Array(pinBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    if (pinHashCalc !== storedHash) {
       return new Response(JSON.stringify({ error: 'PIN incorreto.' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

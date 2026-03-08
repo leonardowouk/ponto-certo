@@ -77,7 +77,6 @@ export default function PortalLogin() {
     try {
       const cpfClean = cpf.replace(/\D/g, '');
       const cpfHash = await hashCPF(cpfClean);
-      const pinHash = await hashPIN(pin);
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const response = await fetch(
@@ -85,7 +84,7 @@ export default function PortalLogin() {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, cpf_hash: cpfHash, pin_hash: pinHash }),
+          body: JSON.stringify({ email, password, cpf_hash: cpfHash, pin }),
         }
       );
 
