@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Clock, FileText, CalendarDays, LogOut, Menu, X, User } from 'lucide-react';
+import { Clock, FileText, CalendarDays, LogOut, Menu, X, User, AlertTriangle, Upload } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -19,6 +19,8 @@ const navItems = [
   { key: 'dashboard', label: 'Meu Painel', icon: CalendarDays, path: '/portal' },
   { key: 'documents', label: 'Meus Documentos', icon: FileText, path: '/portal/documents' },
   { key: 'timesheet', label: 'Meus Pontos', icon: Clock, path: '/portal/timesheet' },
+  { key: 'corrections', label: 'Correções', icon: AlertTriangle, path: '/portal/corrections' },
+  { key: 'certificates', label: 'Atestados', icon: Upload, path: '/portal/certificates' },
 ];
 
 export function PortalLayout({ children, currentPage }: Props) {

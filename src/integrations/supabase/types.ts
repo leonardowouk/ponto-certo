@@ -420,6 +420,69 @@ export type Database = {
           },
         ]
       }
+      punch_corrections: {
+        Row: {
+          attachment_url: string | null
+          created_at: string | null
+          current_punch_id: string | null
+          employee_id: string
+          id: string
+          punch_type: Database["public"]["Enums"]["punch_type"]
+          reason: string
+          requested_time: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["correction_status"]
+          work_date: string
+        }
+        Insert: {
+          attachment_url?: string | null
+          created_at?: string | null
+          current_punch_id?: string | null
+          employee_id: string
+          id?: string
+          punch_type: Database["public"]["Enums"]["punch_type"]
+          reason: string
+          requested_time: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["correction_status"]
+          work_date: string
+        }
+        Update: {
+          attachment_url?: string | null
+          created_at?: string | null
+          current_punch_id?: string | null
+          employee_id?: string
+          id?: string
+          punch_type?: Database["public"]["Enums"]["punch_type"]
+          reason?: string
+          requested_time?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["correction_status"]
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "punch_corrections_current_punch_id_fkey"
+            columns: ["current_punch_id"]
+            isOneToOne: false
+            referencedRelation: "time_punches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "punch_corrections_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sector_schedules: {
         Row: {
           break_minutes: number | null
@@ -770,6 +833,7 @@ export type Database = {
       app_role: "admin" | "rh" | "gestor" | "colaborador" | "super_admin"
       approval_status: "aprovado" | "pendente" | "rejeitado"
       closing_status: "pendente" | "conferido" | "fechado"
+      correction_status: "pendente" | "aprovado" | "rejeitado"
       document_type:
         | "holerite"
         | "espelho_ponto"
@@ -924,6 +988,7 @@ export const Constants = {
       app_role: ["admin", "rh", "gestor", "colaborador", "super_admin"],
       approval_status: ["aprovado", "pendente", "rejeitado"],
       closing_status: ["pendente", "conferido", "fechado"],
+      correction_status: ["pendente", "aprovado", "rejeitado"],
       document_type: [
         "holerite",
         "espelho_ponto",

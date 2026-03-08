@@ -20,6 +20,8 @@ import PortalLogin from "./pages/portal/PortalLogin";
 import PortalDashboard from "./pages/portal/PortalDashboard";
 import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalTimesheet from "./pages/portal/PortalTimesheet";
+import PortalCorrections from "./pages/portal/PortalCorrections";
+import PortalCertificates from "./pages/portal/PortalCertificates";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
 
@@ -57,6 +59,8 @@ const App = () => (
           <Route path="/portal" element={<PortalDashboard />} />
           <Route path="/portal/documents" element={<PortalDocuments />} />
           <Route path="/portal/timesheet" element={<PortalTimesheet />} />
+          <Route path="/portal/corrections" element={<PortalCorrections />} />
+          <Route path="/portal/certificates" element={<PortalCertificates />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
