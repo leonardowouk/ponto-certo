@@ -212,6 +212,7 @@ export type Database = {
           pin_hash: string
           sector_id: string | null
           setor: string | null
+          telefone: string | null
           updated_at: string | null
         }
         Insert: {
@@ -232,6 +233,7 @@ export type Database = {
           pin_hash: string
           sector_id?: string | null
           setor?: string | null
+          telefone?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -252,6 +254,7 @@ export type Database = {
           pin_hash?: string
           sector_id?: string | null
           setor?: string | null
+          telefone?: string | null
           updated_at?: string | null
         }
         Relationships: [
