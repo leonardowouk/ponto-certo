@@ -146,6 +146,8 @@ export default function SettingsPage() {
             <Button onClick={handleSave}>Salvar Configurações</Button>
           </CardContent>
         </Card>
+        {/* Z-API WhatsApp */}
+        <ZApiSettings />
       </div>
     </AdminLayout>
   );
