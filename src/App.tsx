@@ -20,6 +20,8 @@ import PortalLogin from "./pages/portal/PortalLogin";
 import PortalDashboard from "./pages/portal/PortalDashboard";
 import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalTimesheet from "./pages/portal/PortalTimesheet";
+import PortalCorrections from "./pages/portal/PortalCorrections";
+import PortalCertificates from "./pages/portal/PortalCertificates";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
 
