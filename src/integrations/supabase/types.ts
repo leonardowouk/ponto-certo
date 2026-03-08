@@ -38,6 +38,50 @@ export type Database = {
         }
         Relationships: []
       }
+      company_integrations: {
+        Row: {
+          client_token: string | null
+          company_id: string
+          created_at: string | null
+          id: string
+          instance_id: string | null
+          instance_token: string | null
+          integration_type: string
+          is_active: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_token?: string | null
+          company_id: string
+          created_at?: string | null
+          id?: string
+          instance_id?: string | null
+          instance_token?: string | null
+          integration_type?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_token?: string | null
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          instance_id?: string | null
+          instance_token?: string | null
+          integration_type?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_integrations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_signatures: {
         Row: {
           created_at: string | null
