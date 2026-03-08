@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Settings as SettingsIcon, Tablet, Shield, Clock } from 'lucide-react';
 import { ZApiSettings } from '@/components/admin/ZApiSettings';
+import { NotificationSettings } from '@/components/admin/NotificationSettings';
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -148,6 +149,9 @@ export default function SettingsPage() {
         </Card>
         {/* Z-API WhatsApp */}
         <ZApiSettings />
+
+        {/* Notificações WhatsApp */}
+        <NotificationSettings />
       </div>
     </AdminLayout>
   );

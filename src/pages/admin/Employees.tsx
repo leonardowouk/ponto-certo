@@ -70,6 +70,7 @@ export default function EmployeesPage() {
     cargo: '',
     sector_id: '',
     data_admissao: '',
+    telefone: '',
     hasAdminAccess: false,
     email: '',
     password: '',
@@ -85,7 +86,7 @@ export default function EmployeesPage() {
     try {
       let query = supabase
         .from('employees')
-        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, created_at, sectors(nome)')
+        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, telefone, created_at, sectors(nome)')
         .order('nome');
 
       if (selectedCompanyId) {
@@ -138,6 +139,7 @@ export default function EmployeesPage() {
         cargo: employee.cargo || '',
         sector_id: employee.sector_id || '',
         data_admissao: employee.data_admissao || '',
+        telefone: (employee as any).telefone || '',
         hasAdminAccess: false,
         email: '',
         password: '',
@@ -151,6 +153,7 @@ export default function EmployeesPage() {
         cargo: '',
         sector_id: '',
         data_admissao: '',
+        telefone: '',
         hasAdminAccess: false,
         email: '',
         password: '',
@@ -171,6 +174,7 @@ export default function EmployeesPage() {
           cargo: formData.cargo || null,
           sector_id: formData.sector_id || null,
           data_admissao: formData.data_admissao || null,
+          telefone: formData.telefone || null,
         };
 
         // Se informou novo PIN, gera novo hash
@@ -275,6 +279,7 @@ export default function EmployeesPage() {
             cargo: formData.cargo || null,
             sector_id: formData.sector_id || null,
             data_admissao: formData.data_admissao || null,
+            telefone: formData.telefone || null,
             email: formData.hasAdminAccess ? formData.email : null,
             company_id: selectedCompanyId || null,
           })
@@ -446,14 +451,25 @@ export default function EmployeesPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="data_admissao">Data de Admissão</Label>
-                  <Input
-                    id="data_admissao"
-                    type="date"
-                    value={formData.data_admissao}
-                    onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data_admissao">Data de Admissão</Label>
+                    <Input
+                      id="data_admissao"
+                      type="date"
+                      value={formData.data_admissao}
+                      onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefone">Telefone (WhatsApp)</Label>
+                    <Input
+                      id="telefone"
+                      value={formData.telefone}
+                      onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                      placeholder="(42) 99999-9999"
+                    />
+                  </div>
                 </div>
 
                 {/* Acesso Administrativo */}
