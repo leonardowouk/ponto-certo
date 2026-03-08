@@ -137,7 +137,7 @@ serve(async (req) => {
 
     // Load PDF
     const pdfBytes = new Uint8Array(await file.arrayBuffer());
-    const pdfDoc = await PDFDocument.load(pdfBytes);
+    const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const totalPages = pdfDoc.getPageCount();
     console.log(`[split-holerites] PDF has ${totalPages} pages`);
 
