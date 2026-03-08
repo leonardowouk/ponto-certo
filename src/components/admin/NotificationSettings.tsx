@@ -8,8 +8,14 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useCompany } from '@/contexts/CompanyContext';
-import { Bell, Loader2, Save } from 'lucide-react';
+import { Bell, Loader2, Save, Plus, Trash2, Send } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 interface NotificationType {
   key: string;
@@ -19,9 +25,10 @@ interface NotificationType {
   defaultTemplate: string;
   hasSchedule?: boolean;
   variables: string[];
+  isCustom?: boolean;
 }
 
-const NOTIFICATION_TYPES: NotificationType[] = [
+const BUILTIN_NOTIFICATION_TYPES: NotificationType[] = [
   {
     key: 'new_document',
     label: 'Novo documento disponível',
@@ -73,6 +80,16 @@ const NOTIFICATION_TYPES: NotificationType[] = [
   },
 ];
 
+const ICON_OPTIONS = ['📢', '📌', '🔔', '💬', '📋', '🎉', '⚠️', '🗓️', '👋', '💼'];
+
+const AVAILABLE_VARIABLES = [
+  { value: 'nome', label: 'Nome do colaborador' },
+  { value: 'data', label: 'Data' },
+  { value: 'mes', label: 'Mês de referência' },
+  { value: 'documento', label: 'Nome do documento' },
+  { value: 'empresa', label: 'Nome da empresa' },
+];
+
 interface SettingRow {
   notification_type: string;
   is_enabled: boolean;
@@ -86,6 +103,23 @@ export function NotificationSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<Record<string, SettingRow>>({});
+  const [allTypes, setAllTypes] = useState<NotificationType[]>([...BUILTIN_NOTIFICATION_TYPES]);
+
+  // New notification dialog
+  const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newIcon, setNewIcon] = useState('📢');
+  const [newTemplate, setNewTemplate] = useState('');
+  const [newHasSchedule, setNewHasSchedule] = useState(false);
+  const [newScheduleTime, setNewScheduleTime] = useState('09:00');
+
+  // Manual send dialog
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [sendingKey, setSendingKey] = useState<string | null>(null);
+  const [sendPhone, setSendPhone] = useState('');
+  const [sendMessage, setSendMessage] = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (selectedCompanyId) loadSettings();
@@ -99,8 +133,10 @@ export function NotificationSettings() {
       .eq('company_id', selectedCompanyId!);
 
     const map: Record<string, SettingRow> = {};
-    // Initialize with defaults
-    NOTIFICATION_TYPES.forEach(nt => {
+    const customTypes: NotificationType[] = [];
+
+    // Initialize builtin with defaults
+    BUILTIN_NOTIFICATION_TYPES.forEach(nt => {
       map[nt.key] = {
         notification_type: nt.key,
         is_enabled: true,
@@ -108,16 +144,35 @@ export function NotificationSettings() {
         schedule_time: nt.hasSchedule ? '09:00' : null,
       };
     });
-    // Override with saved
+
+    // Override with saved and detect custom
     (data || []).forEach((row: any) => {
+      const isBuiltin = BUILTIN_NOTIFICATION_TYPES.some(b => b.key === row.notification_type);
+      
       map[row.notification_type] = {
         notification_type: row.notification_type,
         is_enabled: row.is_enabled,
         message_template: row.message_template || map[row.notification_type]?.message_template || '',
         schedule_time: row.schedule_time,
       };
+
+      if (!isBuiltin) {
+        // Reconstruct custom type from saved data
+        const label = row.notification_type.replace(/^custom_/, '').replace(/_/g, ' ');
+        customTypes.push({
+          key: row.notification_type,
+          label: label.charAt(0).toUpperCase() + label.slice(1),
+          description: 'Notificação personalizada',
+          icon: '📢',
+          defaultTemplate: row.message_template || '',
+          hasSchedule: !!row.schedule_time,
+          variables: ['nome', 'data'],
+          isCustom: true,
+        });
+      }
     });
 
+    setAllTypes([...BUILTIN_NOTIFICATION_TYPES, ...customTypes]);
     setSettings(map);
     setLoading(false);
   };
@@ -153,42 +208,282 @@ export function NotificationSettings() {
     setSaving(false);
   };
 
+  const handleCreateNotification = () => {
+    if (!newLabel.trim()) {
+      toast({ title: 'Informe o nome da notificação', variant: 'destructive' });
+      return;
+    }
+    if (!newTemplate.trim()) {
+      toast({ title: 'Informe o template da mensagem', variant: 'destructive' });
+      return;
+    }
+
+    const key = 'custom_' + newLabel.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+
+    if (settings[key]) {
+      toast({ title: 'Já existe uma notificação com esse nome', variant: 'destructive' });
+      return;
+    }
+
+    const newType: NotificationType = {
+      key,
+      label: newLabel.trim(),
+      description: newDescription.trim() || 'Notificação personalizada',
+      icon: newIcon,
+      defaultTemplate: newTemplate.trim(),
+      hasSchedule: newHasSchedule,
+      variables: ['nome', 'data'],
+      isCustom: true,
+    };
+
+    setAllTypes(prev => [...prev, newType]);
+    setSettings(prev => ({
+      ...prev,
+      [key]: {
+        notification_type: key,
+        is_enabled: true,
+        message_template: newTemplate.trim(),
+        schedule_time: newHasSchedule ? newScheduleTime : null,
+      },
+    }));
+
+    // Reset form
+    setNewLabel('');
+    setNewDescription('');
+    setNewIcon('📢');
+    setNewTemplate('');
+    setNewHasSchedule(false);
+    setNewScheduleTime('09:00');
+    setNewDialogOpen(false);
+
+    toast({ title: 'Notificação criada!', description: 'Clique em Salvar para persistir.' });
+  };
+
+  const handleDeleteCustom = async (key: string) => {
+    if (!selectedCompanyId) return;
+
+    // Remove from DB
+    await supabase
+      .from('notification_settings')
+      .delete()
+      .eq('company_id', selectedCompanyId)
+      .eq('notification_type', key);
+
+    // Remove from state
+    setAllTypes(prev => prev.filter(t => t.key !== key));
+    setSettings(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+    toast({ title: 'Notificação removida' });
+  };
+
+  const handleOpenSend = (key: string) => {
+    const setting = settings[key];
+    setSendingKey(key);
+    setSendMessage(setting?.message_template || '');
+    setSendPhone('');
+    setSendDialogOpen(true);
+  };
+
+  const handleSendManual = async () => {
+    if (!selectedCompanyId || !sendPhone.trim() || !sendMessage.trim()) {
+      toast({ title: 'Preencha telefone e mensagem', variant: 'destructive' });
+      return;
+    }
+
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          company_id: selectedCompanyId,
+          action: 'send',
+          phone: sendPhone.trim(),
+          message: sendMessage.trim(),
+        },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: 'Mensagem enviada!' });
+        setSendDialogOpen(false);
+      } else {
+        toast({ title: 'Falha ao enviar', description: data?.error, variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    }
+    setSending(false);
+  };
+
   if (!selectedCompanyId) return null;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="w-5 h-5" />
-          Notificações WhatsApp
-        </CardTitle>
-        <CardDescription>
-          Configure quais notificações enviar automaticamente via WhatsApp e personalize as mensagens
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Notificações WhatsApp
+            </CardTitle>
+            <CardDescription>
+              Configure notificações automáticas e crie notificações personalizadas
+            </CardDescription>
+          </div>
+          <Dialog open={newDialogOpen} onOpenChange={setNewDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Plus className="w-4 h-4 mr-1" />
+                Nova Notificação
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Criar Notificação Personalizada</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Ícone</Label>
+                    <Select value={newIcon} onValueChange={setNewIcon}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ICON_OPTIONS.map(icon => (
+                          <SelectItem key={icon} value={icon}>
+                            <span className="text-lg">{icon}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs">Nome da notificação *</Label>
+                    <Input
+                      value={newLabel}
+                      onChange={e => setNewLabel(e.target.value)}
+                      placeholder="Ex: Aniversário do colaborador"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Descrição</Label>
+                  <Input
+                    value={newDescription}
+                    onChange={e => setNewDescription(e.target.value)}
+                    placeholder="Breve descrição do propósito"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Template da mensagem *</Label>
+                  <Textarea
+                    value={newTemplate}
+                    onChange={e => setNewTemplate(e.target.value)}
+                    placeholder="Olá {nome}! ..."
+                    rows={3}
+                  />
+                  <div className="flex gap-1 flex-wrap">
+                    <span className="text-xs text-muted-foreground">Variáveis disponíveis:</span>
+                    {AVAILABLE_VARIABLES.map(v => (
+                      <Badge
+                        key={v.value}
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-accent"
+                        onClick={() => setNewTemplate(prev => prev + `{${v.value}}`)}
+                      >
+                        {`{${v.value}}`}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Agendar horário</Label>
+                    <p className="text-xs text-muted-foreground">Envio em horário fixo</p>
+                  </div>
+                  <Switch checked={newHasSchedule} onCheckedChange={setNewHasSchedule} />
+                </div>
+
+                {newHasSchedule && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Horário</Label>
+                    <Input
+                      type="time"
+                      value={newScheduleTime}
+                      onChange={e => setNewScheduleTime(e.target.value)}
+                      className="w-32"
+                    />
+                  </div>
+                )}
+
+                <Button onClick={handleCreateNotification} className="w-full">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Criar Notificação
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {loading ? (
           <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin" /></div>
         ) : (
           <>
-            {NOTIFICATION_TYPES.map(nt => {
+            {allTypes.map(nt => {
               const setting = settings[nt.key];
               if (!setting) return null;
 
               return (
                 <div key={nt.key} className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-1">
                       <span className="text-lg">{nt.icon}</span>
-                      <div>
-                        <Label className="text-sm font-medium">{nt.label}</Label>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm font-medium">{nt.label}</Label>
+                          {nt.isCustom && (
+                            <Badge variant="secondary" className="text-xs">Personalizada</Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">{nt.description}</p>
                       </div>
                     </div>
-                    <Switch
-                      checked={setting.is_enabled}
-                      onCheckedChange={v => updateSetting(nt.key, 'is_enabled', v)}
-                    />
+                    <div className="flex items-center gap-2">
+                      {nt.isCustom && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleOpenSend(nt.key)}
+                            title="Enviar manualmente"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            onClick={() => handleDeleteCustom(nt.key)}
+                            title="Excluir notificação"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      )}
+                      <Switch
+                        checked={setting.is_enabled}
+                        onCheckedChange={v => updateSetting(nt.key, 'is_enabled', v)}
+                      />
+                    </div>
                   </div>
 
                   {setting.is_enabled && (
@@ -202,7 +497,7 @@ export function NotificationSettings() {
                           className="text-sm"
                         />
                         <div className="flex gap-1 flex-wrap">
-                          {nt.variables.map(v => (
+                          {(nt.variables || ['nome', 'data']).map(v => (
                             <Badge key={v} variant="outline" className="text-xs cursor-help">
                               {`{${v}}`}
                             </Badge>
@@ -234,6 +529,37 @@ export function NotificationSettings() {
           </>
         )}
       </CardContent>
+
+      {/* Manual Send Dialog */}
+      <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar Mensagem Manual</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Telefone (com DDD)</Label>
+              <Input
+                value={sendPhone}
+                onChange={e => setSendPhone(e.target.value)}
+                placeholder="(42) 99999-9999"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Mensagem</Label>
+              <Textarea
+                value={sendMessage}
+                onChange={e => setSendMessage(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <Button onClick={handleSendManual} disabled={sending} className="w-full">
+              {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Enviar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
