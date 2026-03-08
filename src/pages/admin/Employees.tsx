@@ -70,6 +70,7 @@ export default function EmployeesPage() {
     cargo: '',
     sector_id: '',
     data_admissao: '',
+    telefone: '',
     hasAdminAccess: false,
     email: '',
     password: '',
