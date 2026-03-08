@@ -79,11 +79,16 @@ export default function PortalLogin() {
       const cpfHash = await hashCPF(cpfClean);
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/register-employee-portal`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+            'apikey': anonKey,
+          },
           body: JSON.stringify({ email, password, cpf_hash: cpfHash, pin }),
         }
       );
