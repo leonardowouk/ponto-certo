@@ -16,6 +16,10 @@ import Companies from "./pages/admin/Companies";
 import MonthlyClosing from "./pages/admin/MonthlyClosing";
 import Documents from "./pages/admin/Documents";
 import Users from "./pages/admin/Users";
+import PortalLogin from "./pages/portal/PortalLogin";
+import PortalDashboard from "./pages/portal/PortalDashboard";
+import PortalDocuments from "./pages/portal/PortalDocuments";
+import PortalTimesheet from "./pages/portal/PortalTimesheet";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
 
@@ -49,6 +53,10 @@ const App = () => (
           <Route path="/kiosk" element={<Kiosk />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin/*" element={<AdminRoutes />} />
+          <Route path="/portal/login" element={<PortalLogin />} />
+          <Route path="/portal" element={<PortalDashboard />} />
+          <Route path="/portal/documents" element={<PortalDocuments />} />
+          <Route path="/portal/timesheet" element={<PortalTimesheet />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

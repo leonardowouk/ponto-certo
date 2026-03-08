@@ -152,6 +152,7 @@ export type Database = {
       employees: {
         Row: {
           ativo: boolean | null
+          auth_user_id: string | null
           cargo: string | null
           company_id: string | null
           cpf_encrypted: string | null
@@ -171,6 +172,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
+          auth_user_id?: string | null
           cargo?: string | null
           company_id?: string | null
           cpf_encrypted?: string | null
@@ -190,6 +192,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          auth_user_id?: string | null
           cargo?: string | null
           company_id?: string | null
           cpf_encrypted?: string | null
