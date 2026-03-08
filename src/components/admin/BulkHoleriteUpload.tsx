@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
+import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface Props {
@@ -33,6 +33,7 @@ interface SplitSummary {
   unmatched: number;
   errors: number;
   results: SplitResult[];
+  temp_storage_path?: string;
 }
 
 const getMonthOptions = () => {
@@ -56,6 +57,16 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
   const [requiresSignature, setRequiresSignature] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [summary, setSummary] = useState<SplitSummary | null>(null);
+  const [employees, setEmployees] = useState<{ id: string; nome: string }[]>([]);
+  const [manualAssignments, setManualAssignments] = useState<Record<number, string>>({});
+  const [savingPages, setSavingPages] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    if (companyId) {
+      supabase.from('employees').select('id, nome').eq('company_id', companyId).eq('ativo', true).order('nome')
+        .then(({ data }) => setEmployees(data || []));
+    }
+  }, [companyId]);
 
   const handleProcess = async () => {
     if (!companyId || !file) {
@@ -65,6 +76,7 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
 
     setProcessing(true);
     setSummary(null);
+    setManualAssignments({});
 
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -82,9 +94,7 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
         `https://${projectId}.supabase.co/functions/v1/split-holerites`,
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { 'Authorization': `Bearer ${token}` },
           body: formData,
         }
       );
@@ -103,7 +113,6 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
       });
 
       if (result.matched > 0) onUploaded();
-
     } catch (error: any) {
       console.error('Bulk upload error:', error);
       toast({ title: 'Erro no processamento', description: error.message, variant: 'destructive' });
@@ -112,9 +121,77 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
     }
   };
 
+  const handleManualAssign = async (page: number) => {
+    const employeeId = manualAssignments[page];
+    if (!employeeId || !summary?.temp_storage_path || !companyId) return;
+
+    const emp = employees.find(e => e.id === employeeId);
+    if (!emp) return;
+
+    setSavingPages(prev => ({ ...prev, [page]: true }));
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/split-holerites`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            storage_path: summary.temp_storage_path,
+            page,
+            employee_id: emp.id,
+            employee_name: emp.nome,
+            company_id: companyId,
+            ref_month: refMonth,
+            title,
+            requires_signature: requiresSignature,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Erro' }));
+        throw new Error(err.error || 'Erro ao salvar');
+      }
+
+      const result = await response.json();
+
+      // Update summary
+      setSummary(prev => {
+        if (!prev) return prev;
+        const updatedResults = prev.results.map(r =>
+          r.page === page
+            ? { ...r, status: 'matched' as const, matched_employee: emp, document_id: result.document_id }
+            : r
+        );
+        return {
+          ...prev,
+          results: updatedResults,
+          matched: updatedResults.filter(r => r.status === 'matched').length,
+          unmatched: updatedResults.filter(r => r.status === 'unmatched').length,
+        };
+      });
+
+      toast({ title: `Holerite vinculado a ${emp.nome}` });
+      onUploaded();
+    } catch (error: any) {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    } finally {
+      setSavingPages(prev => ({ ...prev, [page]: false }));
+    }
+  };
+
   const resetForm = () => {
     setFile(null);
     setSummary(null);
+    setManualAssignments({});
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -135,6 +212,13 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
       default: return <Badge variant="outline">-</Badge>;
     }
   };
+
+  // Get already-assigned employee IDs to filter them out of manual selects
+  const assignedEmployeeIds = new Set(
+    summary?.results.filter(r => r.status === 'matched' && r.matched_employee).map(r => r.matched_employee!.id) || []
+  );
+
+  const unmatchedCount = summary?.results.filter(r => r.status === 'unmatched').length || 0;
 
   return (
     <Card>
@@ -224,7 +308,7 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
                 <p className="text-sm text-green-600 dark:text-green-500">Distribuídos</p>
               </div>
               <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{summary.unmatched}</p>
+                <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unmatchedCount}</p>
                 <p className="text-sm text-yellow-600 dark:text-yellow-500">Não identificados</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-center">
@@ -232,6 +316,14 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
                 <p className="text-sm text-muted-foreground">Total de páginas</p>
               </div>
             </div>
+
+            {unmatchedCount > 0 && (
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                  {unmatchedCount} página(s) não identificada(s). Selecione o colaborador manualmente abaixo e clique em "Vincular".
+                </p>
+              </div>
+            )}
 
             {/* Results table */}
             <Table>
@@ -241,6 +333,7 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
                   <TableHead>Nome Extraído (IA)</TableHead>
                   <TableHead>Colaborador Vinculado</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center w-28">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -249,8 +342,24 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
                     <TableCell className="font-mono">{r.page}</TableCell>
                     <TableCell className="text-sm">{r.extracted_name || <span className="text-muted-foreground italic">Não encontrado</span>}</TableCell>
                     <TableCell>
-                      {r.matched_employee ? (
+                      {r.status === 'matched' && r.matched_employee ? (
                         <span className="font-medium">{r.matched_employee.nome}</span>
+                      ) : r.status === 'unmatched' ? (
+                        <Select
+                          value={manualAssignments[r.page] || ''}
+                          onValueChange={(v) => setManualAssignments(prev => ({ ...prev, [r.page]: v }))}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecione o colaborador..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {employees
+                              .filter(e => !assignedEmployeeIds.has(e.id))
+                              .map(e => (
+                                <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <span className="text-muted-foreground italic">-</span>
                       )}
@@ -260,6 +369,24 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
                         {statusIcon(r.status)}
                         {statusLabel(r.status)}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {r.status === 'unmatched' && (
+                        <Button
+                          size="sm"
+                          disabled={!manualAssignments[r.page] || savingPages[r.page]}
+                          onClick={() => handleManualAssign(r.page)}
+                        >
+                          {savingPages[r.page] ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Save className="w-3 h-3 mr-1" />
+                              Vincular
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
