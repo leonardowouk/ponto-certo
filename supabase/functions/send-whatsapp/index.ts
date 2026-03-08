@@ -83,18 +83,40 @@ Deno.serve(async (req) => {
 
       const { data: emp } = await supabaseAdmin
         .from('employees')
-        .select('nome, email')
+        .select('nome, telefone')
         .eq('id', employee_id)
         .single();
 
       if (!emp) throw new Error('Colaborador não encontrado');
+      if (!emp.telefone) {
+        return new Response(JSON.stringify({ 
+          success: false, 
+          error: 'Colaborador sem telefone cadastrado' 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-      // For now, we need the phone from somewhere - could be added to employees table
-      // This is a placeholder for future phone field
-      return new Response(JSON.stringify({ 
-        success: false, 
-        error: 'Campo telefone não configurado no cadastro do colaborador' 
-      }), {
+      const docTitle = body.document_title || 'Novo documento';
+      const msg = `📄 Olá ${emp.nome}! Você tem um novo documento disponível: *${docTitle}*. Acesse o Portal do Colaborador para visualizar e assinar.`;
+
+      let cleanPhone = emp.telefone.replace(/\D/g, '');
+      if (cleanPhone.startsWith('0')) cleanPhone = '55' + cleanPhone.substring(1);
+      if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+
+      const resp = await fetch(`${baseUrl}/send-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(integration.client_token ? { 'Client-Token': integration.client_token } : {}),
+        },
+        body: JSON.stringify({ phone: cleanPhone, message: msg }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(`Z-API error [${resp.status}]: ${JSON.stringify(data)}`);
+
+      return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
