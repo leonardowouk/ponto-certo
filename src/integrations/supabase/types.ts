@@ -467,6 +467,47 @@ export type Database = {
           },
         ]
       }
+      notification_settings: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          is_enabled: boolean
+          message_template: string | null
+          notification_type: string
+          schedule_time: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean
+          message_template?: string | null
+          notification_type: string
+          schedule_time?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_enabled?: boolean
+          message_template?: string | null
+          notification_type?: string
+          schedule_time?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       punch_corrections: {
         Row: {
           attachment_url: string | null
