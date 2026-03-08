@@ -1,16 +1,80 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
+import pdfParse from "npm:pdf-parse@1.1.1/lib/pdf-parse.js";
+import { Buffer } from "node:buffer";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-async function extractNameFromPage(pageBytes: Uint8Array, lovableApiKey: string): Promise<string | null> {
+async function extractTextFromPdfPage(pageBytes: Uint8Array): Promise<string> {
   try {
-    const base64 = btoa(String.fromCharCode(...pageBytes));
+    const data = await pdfParse(Buffer.from(pageBytes));
+    return data.text || '';
+  } catch (e) {
+    console.error('PDF text extraction error:', e);
+    return '';
+  }
+}
+
+function extractNameFromText(text: string, employees: { id: string; nome: string }[]): { id: string; nome: string } | null {
+  const normalizedText = text
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  // Try exact match first (full name appears in text)
+  let bestMatch: { emp: { id: string; nome: string }; idx: number } | null = null;
+
+  for (const emp of employees) {
+    const normalizedName = emp.nome
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    const idx = normalizedText.indexOf(normalizedName);
+    if (idx !== -1) {
+      // Prefer matches closer to top of page (lower index)
+      if (!bestMatch || idx < bestMatch.idx) {
+        bestMatch = { emp, idx };
+      }
+    }
+  }
+
+  if (bestMatch) return bestMatch.emp;
+
+  // Fallback: try matching with words (at least first + last name)
+  for (const emp of employees) {
+    const normalizedName = emp.nome
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const nameWords = normalizedName.split(/\s+/).filter(w => w.length > 2);
     
+    if (nameWords.length >= 2) {
+      const firstMatch = normalizedText.includes(nameWords[0]);
+      const lastMatch = normalizedText.includes(nameWords[nameWords.length - 1]);
+      if (firstMatch && lastMatch) {
+        return emp;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function extractNameWithAI(pageBytes: Uint8Array, lovableApiKey: string): Promise<string | null> {
+  try {
+    // Convert PDF page bytes to base64 chunks (avoid stack overflow for large pages)
+    let base64 = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < pageBytes.length; i += chunkSize) {
+      const chunk = pageBytes.subarray(i, Math.min(i + chunkSize, pageBytes.length));
+      base64 += btoa(String.fromCharCode(...chunk));
+    }
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -25,7 +89,7 @@ async function extractNameFromPage(pageBytes: Uint8Array, lovableApiKey: string)
             content: [
               {
                 type: 'text',
-                text: 'Extraia APENAS o nome completo do funcionário/colaborador deste holerite/contracheque. Retorne SOMENTE o nome completo em letras maiúsculas, sem nenhum outro texto, explicação ou formatação. Se não encontrar, retorne "NAO_ENCONTRADO".'
+                text: 'Extraia APENAS o nome completo do funcionário/colaborador deste holerite/contracheque. Retorne SOMENTE o nome completo em letras maiúsculas, sem nenhum outro texto. Se não encontrar, retorne "NAO_ENCONTRADO".'
               },
               {
                 type: 'image_url',
@@ -52,47 +116,6 @@ async function extractNameFromPage(pageBytes: Uint8Array, lovableApiKey: string)
     console.error('AI extraction error:', e);
     return null;
   }
-}
-
-function normalizeForMatch(name: string): string {
-  return name
-    .toUpperCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Z ]/g, '')
-    .trim()
-    .replace(/\s+/g, ' ');
-}
-
-function matchEmployee(extractedName: string, employees: { id: string; nome: string }[]): { id: string; nome: string } | null {
-  const normalExtracted = normalizeForMatch(extractedName);
-  
-  // Exact match
-  for (const emp of employees) {
-    if (normalizeForMatch(emp.nome) === normalExtracted) return emp;
-  }
-  
-  // Contains match (extracted name contains employee name or vice versa)
-  for (const emp of employees) {
-    const normalEmp = normalizeForMatch(emp.nome);
-    if (normalExtracted.includes(normalEmp) || normalEmp.includes(normalExtracted)) return emp;
-  }
-  
-  // Word-based fuzzy: at least first + last name match
-  const extractedWords = normalExtracted.split(' ').filter(w => w.length > 2);
-  let bestMatch: { emp: { id: string; nome: string }; score: number } | null = null;
-  
-  for (const emp of employees) {
-    const empWords = normalizeForMatch(emp.nome).split(' ').filter(w => w.length > 2);
-    const matchCount = empWords.filter(w => extractedWords.includes(w)).length;
-    const score = matchCount / Math.max(empWords.length, 1);
-    
-    if (score >= 0.6 && (!bestMatch || score > bestMatch.score)) {
-      bestMatch = { emp, score };
-    }
-  }
-  
-  return bestMatch?.emp || null;
 }
 
 serve(async (req) => {
@@ -176,18 +199,45 @@ serve(async (req) => {
         singlePageDoc.addPage(copiedPage);
         const singlePageBytes = await singlePageDoc.save();
 
-        // Extract name using AI
-        const extractedName = await extractNameFromPage(singlePageBytes, lovableApiKey);
-        console.log(`[split-holerites] Page ${i + 1} extracted name: ${extractedName}`);
+        // Step 1: Extract text natively from the page
+        const pageText = await extractTextFromPdfPage(singlePageBytes);
+        console.log(`[split-holerites] Page ${i + 1} text length: ${pageText.length}, first 200 chars: ${pageText.substring(0, 200)}`);
 
-        if (!extractedName) {
-          results.push({ page: i + 1, extracted_name: null, matched_employee: null, status: 'unmatched' });
-          continue;
+        // Step 2: Try to match employee by text
+        let matched = pageText.length > 20 ? extractNameFromText(pageText, employees) : null;
+        let extractedName = matched?.nome || null;
+
+        // Step 3: If no match via text, try AI as fallback
+        if (!matched && lovableApiKey) {
+          console.log(`[split-holerites] Page ${i + 1}: No text match, trying AI...`);
+          const aiName = await extractNameWithAI(singlePageBytes, lovableApiKey);
+          if (aiName) {
+            extractedName = aiName;
+            // Try matching AI result to employees
+            const normalizedAI = aiName.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            for (const emp of employees) {
+              const normalizedEmp = emp.nome.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              if (normalizedAI.includes(normalizedEmp) || normalizedEmp.includes(normalizedAI)) {
+                matched = emp;
+                break;
+              }
+            }
+            // Word-based fallback
+            if (!matched) {
+              const aiWords = normalizedAI.split(/\s+/).filter(w => w.length > 2);
+              for (const emp of employees) {
+                const empNorm = emp.nome.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const empWords = empNorm.split(/\s+/).filter(w => w.length > 2);
+                const matchCount = empWords.filter(w => aiWords.includes(w)).length;
+                if (matchCount >= 2 && matchCount / empWords.length >= 0.5) {
+                  matched = emp;
+                  break;
+                }
+              }
+            }
+          }
         }
 
-        // Match to employee
-        const matched = matchEmployee(extractedName, employees);
-        
         if (!matched) {
           results.push({ page: i + 1, extracted_name: extractedName, matched_employee: null, status: 'unmatched' });
           continue;
