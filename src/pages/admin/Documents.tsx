@@ -177,6 +177,10 @@ export default function Documents() {
               <Upload className="w-4 h-4" />
               Enviar Documentos
             </TabsTrigger>
+            <TabsTrigger value="bulk" className="gap-2">
+              <Sparkles className="w-4 h-4" />
+              Upload Inteligente
+            </TabsTrigger>
             <TabsTrigger value="tracker" className="gap-2">
               <ClipboardCheck className="w-4 h-4" />
               Acompanhar Assinaturas
