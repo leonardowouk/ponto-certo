@@ -1,79 +1,89 @@
 
 
-## Módulo de Fechamento Mensal
+# Plano: Painel de Notificações WhatsApp Configurável
 
-### Visão Geral
-Criar um módulo completo de fechamento mensal com 3 etapas: (1) tela de conferência/revisão por colaborador, (2) consolidação e fechamento, (3) geração de espelho para assinatura (PDF-like printable).
+## Objetivo
+Criar um sistema onde o admin pode ativar/desativar cada tipo de notificação WhatsApp individualmente, com templates editáveis, e integrar os disparos automáticos nos fluxos existentes.
 
-### Database
+## Mudanças no Banco de Dados
 
-Nova tabela `monthly_closings`:
-- `id` UUID PK
-- `company_id` UUID NOT NULL
-- `employee_id` UUID NOT NULL
-- `ref_month` DATE NOT NULL (primeiro dia do mês)
-- `total_worked_minutes` INT
-- `total_expected_minutes` INT
-- `total_balance_minutes` INT
-- `total_break_minutes` INT
-- `days_worked` INT
-- `days_absent` INT
-- `days_pending` INT
-- `status` ENUM (`pendente`, `conferido`, `fechado`) default `pendente`
-- `closed_by` UUID (user que fechou)
-- `closed_at` TIMESTAMPTZ
-- `reviewed_by` UUID
-- `reviewed_at` TIMESTAMPTZ
-- `notes` TEXT
-- `created_at` TIMESTAMPTZ default now()
-- UNIQUE(employee_id, ref_month)
+**Nova tabela `notification_settings`** — armazena as preferências de notificação por empresa:
 
-Enum: `closing_status` = pendente, conferido, fechado
+```text
+notification_settings
+├── id (uuid PK)
+├── company_id (uuid FK → companies)
+├── notification_type (text) — ex: 'new_document', 'correction_approved', 'correction_rejected', 'punch_reminder', 'monthly_closing', 'certificate_received'
+├── is_enabled (boolean, default true)
+├── message_template (text) — template com variáveis como {nome}, {documento}, {data}
+├── schedule_time (time, nullable) — horário para lembretes agendados (ex: punch_reminder às 09:00)
+├── created_at / updated_at
+└── UNIQUE(company_id, notification_type)
+```
 
-RLS: admin/RH com filtro por company via employee join.
+RLS: Admin/RH da empresa podem gerenciar.
 
-### Frontend
+## Componente de Configuração (UI)
 
-**1. Nova página `src/pages/admin/MonthlyClosing.tsx`**
-- Rota: `/admin/closing`
-- Menu item no sidebar: "Fechamento Mensal" com ícone `FileCheck`
+**Novo componente `NotificationSettings.tsx`** na página de Settings, abaixo do Z-API:
+- Lista todos os tipos de notificação com Switch para ativar/desativar cada um
+- Campo de template editável com variáveis disponíveis (ex: `{nome}`, `{documento}`)
+- Para "Lembrete de Ponto": campo de horário configurável
+- Salva tudo na tabela `notification_settings`
 
-**2. Fluxo da página (3 estados):**
+```text
+┌─────────────────────────────────────────────┐
+│ 🔔 Notificações WhatsApp                   │
+│ Configure quais notificações enviar         │
+├─────────────────────────────────────────────┤
+│ ☑ Novo documento disponível          [ON]  │
+│   Template: "📄 Olá {nome}! Novo..."       │
+│                                             │
+│ ☑ Correção de ponto aprovada         [ON]  │
+│   Template: "✅ {nome}, sua correção..."    │
+│                                             │
+│ ☑ Correção de ponto rejeitada        [ON]  │
+│   Template: "❌ {nome}, sua correção..."    │
+│                                             │
+│ ☑ Lembrete de ponto                  [OFF] │
+│   Horário: [09:00]                          │
+│   Template: "⏰ {nome}, registre..."        │
+│                                             │
+│ ☑ Fechamento mensal disponível       [ON]  │
+│   Template: "📊 {nome}, seu espelho..."     │
+│                                             │
+│ ☑ Atestado recebido (para RH)        [ON]  │
+│   Template: "🏥 Novo atestado de {nome}..." │
+│                                             │
+│              [Salvar Configurações]         │
+└─────────────────────────────────────────────┘
+```
 
-**Estado 1 - Lista de conferência:**
-- Seletor de mês (reutiliza pattern do Timesheet)
-- Tabela com todos colaboradores da empresa e resumo mensal:
-  - Nome, Dias trabalhados, Horas trabalhadas, Horas esperadas, Saldo, Dias pendentes/revisão, Status do fechamento
-- Badge indicando status: `pendente` (amarelo), `conferido` (azul), `fechado` (verde)
-- Botão "Conferir" em cada linha para abrir a revisão detalhada
-- Botão "Fechar Mês" (só habilita quando todos estão `conferido`)
+## Integração nos Fluxos Existentes
 
-**Estado 2 - Tela de conferência individual (modal ou drawer):**
-- Cabeçalho: Nome do colaborador, mês de referência
-- Tabela dia-a-dia com todas as batidas do mês (reutiliza dados de `timesheets_daily`)
-- Totais consolidados ao final
-- Botão "Marcar como Conferido" → atualiza status para `conferido`
-- Botão "Voltar à lista"
+1. **Documentos** (`Documents.tsx`): após upload/distribuição, chamar `send-whatsapp` com `action: 'notify_document'` se notificação habilitada
+2. **Correções** (tela admin de revisão): ao aprovar/rejeitar, chamar `send-whatsapp` com `action: 'notify_correction'`
+3. **Atestados** (`upload-certificate` edge function): ao receber atestado, notificar RH
+4. **Fechamento mensal** (`MonthlyClosing.tsx`): ao fechar mês, notificar colaboradores
 
-**Estado 3 - Espelho para assinatura (print view):**
-- Botão "Gerar Espelho" por colaborador (após fechado)
-- Abre uma view printable (nova janela ou dialog full-screen) com:
-  - Cabeçalho: empresa, colaborador, mês
-  - Tabela de todos os dias do mês com batidas, trabalhado, esperado, saldo
-  - Totais no rodapé
-  - Linhas de assinatura: "Colaborador: ___" e "Responsável: ___"
-  - Botão "Imprimir" (window.print)
+## Edge Function Atualizada
 
-**3. Lógica de consolidação:**
-- Ao entrar na página, calcula o resumo mensal de cada colaborador a partir de `timesheets_daily`
-- Upsert no `monthly_closings` com os totais calculados
-- "Fechar Mês" marca todos como `fechado` e registra `closed_by` e `closed_at`
+Expandir `send-whatsapp` para:
+- Aceitar novas actions: `notify_correction`, `notify_certificate`, `notify_closing`
+- Consultar `notification_settings` para verificar se a notificação está habilitada antes de enviar
+- Usar o template configurado (ou fallback para template padrão)
+- Substituir variáveis `{nome}`, `{documento}`, `{data}` no template
 
-### Arquivos a criar/editar:
-1. **Migração SQL**: criar enum `closing_status` e tabela `monthly_closings` com RLS
-2. **`src/pages/admin/MonthlyClosing.tsx`**: página principal com lista + conferência + espelho
-3. **`src/components/admin/EmployeeReviewModal.tsx`**: modal de conferência individual
-4. **`src/components/admin/TimesheetPrintView.tsx`**: componente de espelho para impressão
-5. **`src/App.tsx`**: adicionar rota `/admin/closing`
-6. **`src/components/admin/AdminLayout.tsx`**: adicionar item de menu "Fechamento"
+## Campo Telefone no Cadastro
+
+Adicionar campo `telefone` no formulário de cadastro/edição de colaboradores em `Employees.tsx`, já que a coluna existe no banco mas o campo não aparece na UI.
+
+## Arquivos Afetados
+- `supabase/migrations/` — nova tabela `notification_settings`
+- `src/components/admin/NotificationSettings.tsx` — novo componente
+- `src/pages/admin/Settings.tsx` — incluir NotificationSettings
+- `src/pages/admin/Employees.tsx` — campo telefone
+- `supabase/functions/send-whatsapp/index.ts` — novas actions + consulta settings
+- `src/pages/admin/Documents.tsx` — disparo após upload
+- `src/pages/admin/MonthlyClosing.tsx` — disparo ao fechar
 
