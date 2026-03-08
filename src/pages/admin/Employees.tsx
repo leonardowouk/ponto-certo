@@ -139,6 +139,7 @@ export default function EmployeesPage() {
         cargo: employee.cargo || '',
         sector_id: employee.sector_id || '',
         data_admissao: employee.data_admissao || '',
+        telefone: (employee as any).telefone || '',
         hasAdminAccess: false,
         email: '',
         password: '',
