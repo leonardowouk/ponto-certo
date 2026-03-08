@@ -59,6 +59,8 @@ const App = () => (
           <Route path="/portal" element={<PortalDashboard />} />
           <Route path="/portal/documents" element={<PortalDocuments />} />
           <Route path="/portal/timesheet" element={<PortalTimesheet />} />
+          <Route path="/portal/corrections" element={<PortalCorrections />} />
+          <Route path="/portal/certificates" element={<PortalCertificates />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
