@@ -14,6 +14,7 @@ import HourBank from "./pages/admin/HourBank";
 import Settings from "./pages/admin/Settings";
 import Companies from "./pages/admin/Companies";
 import MonthlyClosing from "./pages/admin/MonthlyClosing";
+import Documents from "./pages/admin/Documents";
 import Users from "./pages/admin/Users";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
