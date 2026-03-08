@@ -32,6 +32,7 @@ const AdminRoutes = () => (
       <Route path="/settings" element={<Settings />} />
       <Route path="/companies" element={<Companies />} />
       <Route path="/closing" element={<MonthlyClosing />} />
+      <Route path="/documents" element={<Documents />} />
       <Route path="/users" element={<Users />} />
     </Routes>
   </CompanyProvider>
