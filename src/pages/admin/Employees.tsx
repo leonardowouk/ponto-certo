@@ -451,14 +451,25 @@ export default function EmployeesPage() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="data_admissao">Data de Admissão</Label>
-                  <Input
-                    id="data_admissao"
-                    type="date"
-                    value={formData.data_admissao}
-                    onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data_admissao">Data de Admissão</Label>
+                    <Input
+                      id="data_admissao"
+                      type="date"
+                      value={formData.data_admissao}
+                      onChange={(e) => setFormData({ ...formData, data_admissao: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefone">Telefone (WhatsApp)</Label>
+                    <Input
+                      id="telefone"
+                      value={formData.telefone}
+                      onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                      placeholder="(42) 99999-9999"
+                    />
+                  </div>
                 </div>
 
                 {/* Acesso Administrativo */}
