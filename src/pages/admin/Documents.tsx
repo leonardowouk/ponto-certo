@@ -300,6 +300,10 @@ export default function Documents() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="bulk">
+            <BulkHoleriteUpload companyId={selectedCompanyId} onUploaded={loadDocuments} />
+          </TabsContent>
+
           <TabsContent value="tracker">
             <SignatureTracker companyId={selectedCompanyId} />
           </TabsContent>
