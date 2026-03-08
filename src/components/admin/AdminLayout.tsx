@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { 
   Clock, Users, CalendarDays, Wallet, LayoutDashboard,
-  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield
+  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText
 } from 'lucide-react';
 import { CompanyProvider, useCompany } from '@/contexts/CompanyContext';
 
