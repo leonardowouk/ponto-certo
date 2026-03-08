@@ -174,6 +174,7 @@ export default function EmployeesPage() {
           cargo: formData.cargo || null,
           sector_id: formData.sector_id || null,
           data_admissao: formData.data_admissao || null,
+          telefone: formData.telefone || null,
         };
 
         // Se informou novo PIN, gera novo hash
