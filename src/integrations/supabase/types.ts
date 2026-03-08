@@ -38,6 +38,117 @@ export type Database = {
         }
         Relationships: []
       }
+      document_signatures: {
+        Row: {
+          created_at: string | null
+          document_id: string
+          employee_id: string
+          id: string
+          ip_address: string | null
+          notes: string | null
+          pin_verified: boolean | null
+          signed_at: string | null
+          signed_via: string | null
+          status: Database["public"]["Enums"]["signature_status"]
+        }
+        Insert: {
+          created_at?: string | null
+          document_id: string
+          employee_id: string
+          id?: string
+          ip_address?: string | null
+          notes?: string | null
+          pin_verified?: boolean | null
+          signed_at?: string | null
+          signed_via?: string | null
+          status?: Database["public"]["Enums"]["signature_status"]
+        }
+        Update: {
+          created_at?: string | null
+          document_id?: string
+          employee_id?: string
+          id?: string
+          ip_address?: string | null
+          notes?: string | null
+          pin_verified?: boolean | null
+          signed_at?: string | null
+          signed_via?: string | null
+          status?: Database["public"]["Enums"]["signature_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_signatures_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "employee_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_signatures_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_documents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          document_type: Database["public"]["Enums"]["document_type"]
+          employee_id: string
+          file_url: string
+          id: string
+          ref_month: string | null
+          requires_signature: boolean | null
+          title: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          document_type?: Database["public"]["Enums"]["document_type"]
+          employee_id: string
+          file_url: string
+          id?: string
+          ref_month?: string | null
+          requires_signature?: boolean | null
+          title: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          document_type?: Database["public"]["Enums"]["document_type"]
+          employee_id?: string
+          file_url?: string
+          id?: string
+          ref_month?: string | null
+          requires_signature?: boolean | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           ativo: boolean | null
@@ -656,6 +767,13 @@ export type Database = {
       app_role: "admin" | "rh" | "gestor" | "colaborador" | "super_admin"
       approval_status: "aprovado" | "pendente" | "rejeitado"
       closing_status: "pendente" | "conferido" | "fechado"
+      document_type:
+        | "holerite"
+        | "espelho_ponto"
+        | "contrato"
+        | "advertencia"
+        | "comunicado"
+        | "outro"
       hour_bank_source:
         | "automatico"
         | "ajuste_manual"
@@ -665,6 +783,7 @@ export type Database = {
       punch_status: "ok" | "suspeito" | "ajustado" | "pendente"
       punch_type: "entrada" | "saida" | "intervalo_inicio" | "intervalo_fim"
       schedule_type: "fixa" | "flexivel" | "escala"
+      signature_status: "pendente" | "assinado" | "recusado"
       timesheet_status:
         | "ok"
         | "pendente"
@@ -802,6 +921,14 @@ export const Constants = {
       app_role: ["admin", "rh", "gestor", "colaborador", "super_admin"],
       approval_status: ["aprovado", "pendente", "rejeitado"],
       closing_status: ["pendente", "conferido", "fechado"],
+      document_type: [
+        "holerite",
+        "espelho_ponto",
+        "contrato",
+        "advertencia",
+        "comunicado",
+        "outro",
+      ],
       hour_bank_source: [
         "automatico",
         "ajuste_manual",
@@ -812,6 +939,7 @@ export const Constants = {
       punch_status: ["ok", "suspeito", "ajustado", "pendente"],
       punch_type: ["entrada", "saida", "intervalo_inicio", "intervalo_fim"],
       schedule_type: ["fixa", "flexivel", "escala"],
+      signature_status: ["pendente", "assinado", "recusado"],
       timesheet_status: [
         "ok",
         "pendente",
