@@ -16,9 +16,9 @@ serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { email, password, cpf_hash, pin_hash } = await req.json();
+    const { email, password, cpf_hash, pin } = await req.json();
 
-    if (!email || !password || !cpf_hash || !pin_hash) {
+    if (!email || !password || !cpf_hash || !pin) {
       return new Response(JSON.stringify({ error: 'Dados incompletos.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
