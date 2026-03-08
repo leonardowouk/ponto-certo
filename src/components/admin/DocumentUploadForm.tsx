@@ -156,6 +156,16 @@ export function DocumentUploadForm({ companyId, onUploaded }: Props) {
         });
       }
 
+      // Send WhatsApp notification
+      if (companyId) {
+        sendWhatsAppNotification({
+          companyId,
+          action: 'notify_document',
+          employeeId: empId,
+          variables: { document_title: title.trim() },
+        }).catch(console.error);
+      }
+
       successCount++;
     }
 

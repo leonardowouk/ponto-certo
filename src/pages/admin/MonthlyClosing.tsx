@@ -200,6 +200,20 @@ export default function MonthlyClosing() {
       toast({ title: 'Erro ao fechar mês', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Mês fechado!', description: 'Todos os colaboradores foram fechados com sucesso.' });
+      
+      // Send WhatsApp notifications to all employees
+      if (selectedCompanyId) {
+        const monthLabel = format(refMonth, 'MMMM/yyyy', { locale: ptBR });
+        for (const s of summaries.filter(s => s.status === 'conferido')) {
+          sendWhatsAppNotification({
+            companyId: selectedCompanyId,
+            action: 'notify_closing',
+            employeeId: s.employeeId,
+            variables: { ref_month_label: monthLabel },
+          }).catch(console.error);
+        }
+      }
+      
       loadData();
     }
     setClosingAll(false);

@@ -5,6 +5,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function applyTemplate(template: string, vars: Record<string, string>): string {
+  let result = template;
+  for (const [key, value] of Object.entries(vars)) {
+    if (key.startsWith('_')) continue;
+    result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+  }
+  return result;
+}
+
+async function sendMessage(baseUrl: string, clientToken: string | null, phone: string, message: string) {
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.startsWith('0')) cleanPhone = '55' + cleanPhone.substring(1);
+  if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
+
+  const resp = await fetch(`${baseUrl}/send-text`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(clientToken ? { 'Client-Token': clientToken } : {}),
+    },
+    body: JSON.stringify({ phone: cleanPhone, message }),
+  });
+
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(`Z-API error [${resp.status}]: ${JSON.stringify(data)}`);
+  return data;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -14,7 +42,7 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json();
-    const { company_id, action, phone, message, employee_id } = body;
+    const { company_id, action, phone, message, employee_id, _template } = body;
 
     if (!company_id) throw new Error('company_id é obrigatório');
 
@@ -35,43 +63,19 @@ Deno.serve(async (req) => {
     if (action === 'test') {
       const resp = await fetch(`${baseUrl}/status`, {
         method: 'GET',
-        headers: integration.client_token
-          ? { 'Client-Token': integration.client_token }
-          : {},
+        headers: integration.client_token ? { 'Client-Token': integration.client_token } : {},
       });
-
       const data = await resp.json();
       const connected = data?.connected || data?.status === 'connected' || resp.ok;
-
       return new Response(JSON.stringify({ success: connected, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Send message
+    // Send raw message
     if (action === 'send') {
       if (!phone || !message) throw new Error('phone e message são obrigatórios');
-
-      // Clean phone number (remove non-digits, ensure country code)
-      let cleanPhone = phone.replace(/\D/g, '');
-      if (cleanPhone.startsWith('0')) cleanPhone = '55' + cleanPhone.substring(1);
-      if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
-
-      const resp = await fetch(`${baseUrl}/send-text`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(integration.client_token ? { 'Client-Token': integration.client_token } : {}),
-        },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          message,
-        }),
-      });
-
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(`Z-API error [${resp.status}]: ${JSON.stringify(data)}`);
-
+      const data = await sendMessage(baseUrl, integration.client_token, phone, message);
       return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -89,33 +93,100 @@ Deno.serve(async (req) => {
 
       if (!emp) throw new Error('Colaborador não encontrado');
       if (!emp.telefone) {
-        return new Response(JSON.stringify({ 
-          success: false, 
-          error: 'Colaborador sem telefone cadastrado' 
-        }), {
+        return new Response(JSON.stringify({ success: false, error: 'Colaborador sem telefone cadastrado' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       const docTitle = body.document_title || 'Novo documento';
-      const msg = `📄 Olá ${emp.nome}! Você tem um novo documento disponível: *${docTitle}*. Acesse o Portal do Colaborador para visualizar e assinar.`;
+      const defaultMsg = `📄 Olá {nome}! Você tem um novo documento disponível: *{documento}*. Acesse o Portal do Colaborador para visualizar e assinar.`;
+      const template = _template || defaultMsg;
+      const msg = applyTemplate(template, { nome: emp.nome, documento: docTitle });
 
-      let cleanPhone = emp.telefone.replace(/\D/g, '');
-      if (cleanPhone.startsWith('0')) cleanPhone = '55' + cleanPhone.substring(1);
-      if (!cleanPhone.startsWith('55')) cleanPhone = '55' + cleanPhone;
-
-      const resp = await fetch(`${baseUrl}/send-text`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(integration.client_token ? { 'Client-Token': integration.client_token } : {}),
-        },
-        body: JSON.stringify({ phone: cleanPhone, message: msg }),
+      const data = await sendMessage(baseUrl, integration.client_token, emp.telefone, msg);
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
 
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(`Z-API error [${resp.status}]: ${JSON.stringify(data)}`);
+    // Notify correction approved/rejected
+    if (action === 'notify_correction_approved' || action === 'notify_correction_rejected') {
+      if (!employee_id) throw new Error('employee_id é obrigatório');
 
+      const { data: emp } = await supabaseAdmin
+        .from('employees')
+        .select('nome, telefone')
+        .eq('id', employee_id)
+        .single();
+
+      if (!emp) throw new Error('Colaborador não encontrado');
+      if (!emp.telefone) {
+        return new Response(JSON.stringify({ success: false, error: 'Colaborador sem telefone cadastrado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const workDate = body.work_date || '';
+      const motivo = body.review_notes || 'Sem motivo informado';
+      
+      const defaultApproved = `✅ Olá {nome}! Sua solicitação de correção de ponto do dia {data} foi *aprovada*.`;
+      const defaultRejected = `❌ Olá {nome}! Sua solicitação de correção de ponto do dia {data} foi *rejeitada*. Motivo: {motivo}`;
+      
+      const defaultMsg = action === 'notify_correction_approved' ? defaultApproved : defaultRejected;
+      const template = _template || defaultMsg;
+      const msg = applyTemplate(template, { nome: emp.nome, data: workDate, motivo });
+
+      const data = await sendMessage(baseUrl, integration.client_token, emp.telefone, msg);
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Notify monthly closing
+    if (action === 'notify_closing') {
+      if (!employee_id) throw new Error('employee_id é obrigatório');
+
+      const { data: emp } = await supabaseAdmin
+        .from('employees')
+        .select('nome, telefone')
+        .eq('id', employee_id)
+        .single();
+
+      if (!emp) throw new Error('Colaborador não encontrado');
+      if (!emp.telefone) {
+        return new Response(JSON.stringify({ success: false, error: 'Colaborador sem telefone cadastrado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const mes = body.ref_month_label || '';
+      const defaultMsg = `📊 Olá {nome}! Seu espelho de ponto de *{mes}* está disponível para conferência no Portal do Colaborador.`;
+      const template = _template || defaultMsg;
+      const msg = applyTemplate(template, { nome: emp.nome, mes });
+
+      const data = await sendMessage(baseUrl, integration.client_token, emp.telefone, msg);
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Notify certificate received (to RH)
+    if (action === 'notify_certificate') {
+      const employeeName = body.employee_name || 'Colaborador';
+      const refDate = body.ref_date || '';
+      const rhPhone = body.rh_phone;
+
+      if (!rhPhone) {
+        return new Response(JSON.stringify({ success: false, error: 'Telefone do RH não informado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const defaultMsg = `🏥 Novo atestado recebido de *{nome}* para o dia {data}. Acesse o painel para verificar.`;
+      const template = _template || defaultMsg;
+      const msg = applyTemplate(template, { nome: employeeName, data: refDate });
+
+      const data = await sendMessage(baseUrl, integration.client_token, rhPhone, msg);
       return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
