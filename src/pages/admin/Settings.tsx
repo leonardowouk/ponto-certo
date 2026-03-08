@@ -149,6 +149,9 @@ export default function SettingsPage() {
         </Card>
         {/* Z-API WhatsApp */}
         <ZApiSettings />
+
+        {/* Notificações WhatsApp */}
+        <NotificationSettings />
       </div>
     </AdminLayout>
   );

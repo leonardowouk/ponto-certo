@@ -86,7 +86,7 @@ export default function EmployeesPage() {
     try {
       let query = supabase
         .from('employees')
-        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, created_at, sectors(nome)')
+        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, telefone, created_at, sectors(nome)')
         .order('nome');
 
       if (selectedCompanyId) {
