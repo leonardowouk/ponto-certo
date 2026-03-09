@@ -22,6 +22,7 @@ import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalTimesheet from "./pages/portal/PortalTimesheet";
 import PortalCorrections from "./pages/portal/PortalCorrections";
 import PortalCertificates from "./pages/portal/PortalCertificates";
+import PortalResetPassword from "./pages/portal/PortalResetPassword";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
 
