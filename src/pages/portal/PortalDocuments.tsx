@@ -113,11 +113,21 @@ export default function PortalDocuments() {
   };
 
   const handleView = async (fileUrl: string) => {
-    const { data } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 300);
-    if (data?.signedUrl) {
-      window.open(data.signedUrl, '_blank');
-      if (signingDoc) setDocViewed(true);
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 300);
+    if (error || !data?.signedUrl) {
+      toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível gerar o link do arquivo.', variant: 'destructive' });
+      return;
     }
+    const newWindow = window.open(data.signedUrl, '_blank');
+    if (!newWindow) {
+      // Popup blocked - fallback to link
+      const a = document.createElement('a');
+      a.href = data.signedUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.click();
+    }
+    if (signingDoc) setDocViewed(true);
   };
 
   const getAcceptanceText = (title: string) =>
