@@ -1,97 +1,79 @@
 
 
-# Plano: Certificação Robusta de Assinatura Digital
+## Módulo de Fechamento Mensal
 
-## Problema Atual
+### Visão Geral
+Criar um módulo completo de fechamento mensal com 3 etapas: (1) tela de conferência/revisão por colaborador, (2) consolidação e fechamento, (3) geração de espelho para assinatura (PDF-like printable).
 
-A assinatura atual tem fragilidades jurídicas significativas:
-1. **Portal do colaborador** assina com um simples clique, sem verificação de identidade (sem PIN)
-2. **IP do assinante** não é capturado de fato (campo existe mas nunca é preenchido)
-3. **Não há hash do documento** — impossível provar que o documento não foi alterado após assinatura
-4. **Não há user-agent** capturado (navegador, dispositivo)
-5. **Não há termo de aceite** registrado — o texto que o colaborador concordou não é gravado
-6. **Não há log de auditoria** imutável — se alguém alterar o registro de assinatura, não há rastro
+### Database
 
-## Solução Proposta
+Nova tabela `monthly_closings`:
+- `id` UUID PK
+- `company_id` UUID NOT NULL
+- `employee_id` UUID NOT NULL
+- `ref_month` DATE NOT NULL (primeiro dia do mês)
+- `total_worked_minutes` INT
+- `total_expected_minutes` INT
+- `total_balance_minutes` INT
+- `total_break_minutes` INT
+- `days_worked` INT
+- `days_absent` INT
+- `days_pending` INT
+- `status` ENUM (`pendente`, `conferido`, `fechado`) default `pendente`
+- `closed_by` UUID (user que fechou)
+- `closed_at` TIMESTAMPTZ
+- `reviewed_by` UUID
+- `reviewed_at` TIMESTAMPTZ
+- `notes` TEXT
+- `created_at` TIMESTAMPTZ default now()
+- UNIQUE(employee_id, ref_month)
 
-### 1. Nova tabela `signature_audit_log` (imutável)
+Enum: `closing_status` = pendente, conferido, fechado
 
-Registro de auditoria que não pode ser alterado nem deletado. Cada assinatura gera um registro com todas as evidências:
+RLS: admin/RH com filtro por company via employee join.
 
-- `signature_id` — referência à assinatura
-- `employee_id`, `document_id`
-- `action` — 'signed', 'refused', 'viewed'
-- `ip_address` — IP real do assinante
-- `user_agent` — navegador/dispositivo
-- `document_hash` — SHA-256 do arquivo no momento da assinatura
-- `acceptance_text` — texto exato do termo que o colaborador concordou
-- `pin_verified` — se PIN foi verificado
-- `signed_via` — 'portal', 'admin', 'kiosk'
-- `auth_user_id` — usuário autenticado que executou
-- `created_at` — timestamp imutável
+### Frontend
 
-RLS: somente INSERT (para registrar) e SELECT (para consultar). Sem UPDATE/DELETE.
+**1. Nova página `src/pages/admin/MonthlyClosing.tsx`**
+- Rota: `/admin/closing`
+- Menu item no sidebar: "Fechamento Mensal" com ícone `FileCheck`
 
-### 2. Edge Function `sign-document` (server-side)
+**2. Fluxo da página (3 estados):**
 
-Mover toda a lógica de assinatura para uma Edge Function segura:
-- Recebe: `signature_id`, `pin`, `acceptance_text`
-- Captura IP real do request (`req.headers.get('x-forwarded-for')`)
-- Captura user-agent (`req.headers.get('user-agent')`)
-- Gera hash SHA-256 do arquivo no storage
-- Verifica PIN do colaborador
-- Atualiza `document_signatures` com todos os campos
-- Insere registro em `signature_audit_log`
-- Retorna sucesso ou erro
+**Estado 1 - Lista de conferência:**
+- Seletor de mês (reutiliza pattern do Timesheet)
+- Tabela com todos colaboradores da empresa e resumo mensal:
+  - Nome, Dias trabalhados, Horas trabalhadas, Horas esperadas, Saldo, Dias pendentes/revisão, Status do fechamento
+- Badge indicando status: `pendente` (amarelo), `conferido` (azul), `fechado` (verde)
+- Botão "Conferir" em cada linha para abrir a revisão detalhada
+- Botão "Fechar Mês" (só habilita quando todos estão `conferido`)
 
-Isso garante que IP, hash e timestamp são gerados no servidor (não manipuláveis pelo cliente).
+**Estado 2 - Tela de conferência individual (modal ou drawer):**
+- Cabeçalho: Nome do colaborador, mês de referência
+- Tabela dia-a-dia com todas as batidas do mês (reutiliza dados de `timesheets_daily`)
+- Totais consolidados ao final
+- Botão "Marcar como Conferido" → atualiza status para `conferido`
+- Botão "Voltar à lista"
 
-### 3. Melhorar colunas de `document_signatures`
+**Estado 3 - Espelho para assinatura (print view):**
+- Botão "Gerar Espelho" por colaborador (após fechado)
+- Abre uma view printable (nova janela ou dialog full-screen) com:
+  - Cabeçalho: empresa, colaborador, mês
+  - Tabela de todos os dias do mês com batidas, trabalhado, esperado, saldo
+  - Totais no rodapé
+  - Linhas de assinatura: "Colaborador: ___" e "Responsável: ___"
+  - Botão "Imprimir" (window.print)
 
-Adicionar ao registro existente:
-- `user_agent` TEXT
-- `document_hash` TEXT — SHA-256 do arquivo
-- `acceptance_text` TEXT — texto do termo aceito
+**3. Lógica de consolidação:**
+- Ao entrar na página, calcula o resumo mensal de cada colaborador a partir de `timesheets_daily`
+- Upsert no `monthly_closings` com os totais calculados
+- "Fechar Mês" marca todos como `fechado` e registra `closed_by` e `closed_at`
 
-### 4. Atualizar Portal do Colaborador
-
-No `PortalDocuments.tsx`, substituir o AlertDialog simples por um fluxo mais robusto:
-- Exibir o documento para leitura
-- Mostrar termo de aceite completo: *"Declaro que li e estou de acordo com o conteúdo do documento {título}. Esta assinatura digital tem validade jurídica conforme Art. 10, §2º da MP 2.200-2/2001."*
-- Checkbox obrigatório: "Li e concordo"
-- Campo de PIN obrigatório
-- Chamar a Edge Function `sign-document`
-
-### 5. Atualizar Assinatura via Admin
-
-No `DocumentSignatureModal.tsx`:
-- Também chamar a Edge Function em vez de update direto
-- Registrar que foi assinado "via admin" com o contexto completo
-
-### 6. Tela de Comprovante de Assinatura
-
-Componente para exibir/imprimir comprovante com:
-- Nome do colaborador, CPF (parcial), documento assinado
-- Data/hora da assinatura, IP, user-agent
-- Hash SHA-256 do documento
-- Texto do aceite
-- Verificação de PIN: Sim/Não
-
-## Arquivos Afetados
-
-- **Migração SQL**: nova tabela `signature_audit_log` + novas colunas em `document_signatures`
-- **`supabase/functions/sign-document/index.ts`**: nova Edge Function
-- **`src/pages/portal/PortalDocuments.tsx`**: fluxo de assinatura robusto com PIN + aceite
-- **`src/components/admin/DocumentSignatureModal.tsx`**: usar Edge Function
-- **`src/components/admin/SignatureTracker.tsx`**: exibir novos campos (IP, hash, aceite)
-
-## Valor Jurídico
-
-Com essas mudanças, cada assinatura terá:
-- Identificação do signatário (PIN + auth user)
-- Prova de integridade do documento (hash SHA-256)
-- Registro de intenção (termo de aceite gravado)
-- Evidências técnicas (IP, user-agent, timestamp server-side)
-- Trilha de auditoria imutável
-- Conformidade com MP 2.200-2/2001 Art. 10, §2º (assinatura eletrônica com acordo entre as partes)
+### Arquivos a criar/editar:
+1. **Migração SQL**: criar enum `closing_status` e tabela `monthly_closings` com RLS
+2. **`src/pages/admin/MonthlyClosing.tsx`**: página principal com lista + conferência + espelho
+3. **`src/components/admin/EmployeeReviewModal.tsx`**: modal de conferência individual
+4. **`src/components/admin/TimesheetPrintView.tsx`**: componente de espelho para impressão
+5. **`src/App.tsx`**: adicionar rota `/admin/closing`
+6. **`src/components/admin/AdminLayout.tsx`**: adicionar item de menu "Fechamento"
 

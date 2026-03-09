@@ -6,10 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ClipboardCheck, Loader2 } from 'lucide-react';
+import { ClipboardCheck, Loader2, Eye, ShieldCheck } from 'lucide-react';
 
 interface Props {
   companyId: string | null;
@@ -45,6 +47,10 @@ interface SignatureRow {
   signedAt: string | null;
   signedVia: string | null;
   pinVerified: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  documentHash: string | null;
+  acceptanceText: string | null;
 }
 
 export function SignatureTracker({ companyId }: Props) {
@@ -54,8 +60,8 @@ export function SignatureTracker({ companyId }: Props) {
   const [filterStatus, setFilterStatus] = useState('all');
   const [rows, setRows] = useState<SignatureRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [detailRow, setDetailRow] = useState<SignatureRow | null>(null);
 
-  // Summary stats
   const totalSigs = rows.length;
   const signedCount = rows.filter(r => r.status === 'assinado').length;
   const pendingCount = rows.filter(r => r.status === 'pendente').length;
@@ -111,6 +117,10 @@ export function SignatureTracker({ companyId }: Props) {
         signedAt: s.signed_at,
         signedVia: s.signed_via,
         pinVerified: s.pin_verified,
+        ipAddress: s.ip_address,
+        userAgent: s.user_agent,
+        documentHash: s.document_hash,
+        acceptanceText: s.acceptance_text,
       };
     });
 
@@ -203,6 +213,7 @@ export function SignatureTracker({ companyId }: Props) {
                   <TableHead>Assinado em</TableHead>
                   <TableHead>Via</TableHead>
                   <TableHead className="text-center">PIN</TableHead>
+                  <TableHead className="text-center">Evidências</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -219,6 +230,13 @@ export function SignatureTracker({ companyId }: Props) {
                     <TableCell className="text-center">
                       {r.pinVerified ? <Badge className="bg-green-100 text-green-800">✓</Badge> : '-'}
                     </TableCell>
+                    <TableCell className="text-center">
+                      {r.status === 'assinado' && r.documentHash ? (
+                        <Button size="sm" variant="ghost" onClick={() => setDetailRow(r)}>
+                          <Eye className="w-3 h-3 mr-1" /> Ver
+                        </Button>
+                      ) : '-'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -226,6 +244,54 @@ export function SignatureTracker({ companyId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Signature Evidence Dialog */}
+      <Dialog open={!!detailRow} onOpenChange={() => setDetailRow(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5" />
+              Comprovante de Assinatura Digital
+            </DialogTitle>
+          </DialogHeader>
+          {detailRow && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2">
+                <div><span className="text-muted-foreground">Documento:</span></div>
+                <div className="font-medium">{detailRow.documentTitle}</div>
+                <div><span className="text-muted-foreground">Colaborador:</span></div>
+                <div className="font-medium">{detailRow.employeeName}</div>
+                <div><span className="text-muted-foreground">Assinado em:</span></div>
+                <div>{detailRow.signedAt ? format(new Date(detailRow.signedAt), 'dd/MM/yyyy HH:mm:ss') : '-'}</div>
+                <div><span className="text-muted-foreground">Via:</span></div>
+                <div>{detailRow.signedVia || '-'}</div>
+                <div><span className="text-muted-foreground">PIN verificado:</span></div>
+                <div>{detailRow.pinVerified ? '✓ Sim' : '✗ Não'}</div>
+                <div><span className="text-muted-foreground">IP:</span></div>
+                <div className="font-mono text-xs">{detailRow.ipAddress || '-'}</div>
+                <div><span className="text-muted-foreground">User-Agent:</span></div>
+                <div className="font-mono text-xs break-all">{detailRow.userAgent || '-'}</div>
+              </div>
+
+              <div className="border-t pt-3">
+                <p className="text-muted-foreground mb-1">Hash SHA-256 do documento:</p>
+                <p className="font-mono text-xs bg-muted p-2 rounded break-all">
+                  {detailRow.documentHash || '-'}
+                </p>
+              </div>
+
+              {detailRow.acceptanceText && (
+                <div className="border-t pt-3">
+                  <p className="text-muted-foreground mb-1">Termo de aceite registrado:</p>
+                  <p className="text-xs bg-muted p-2 rounded leading-relaxed">
+                    {detailRow.acceptanceText}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
