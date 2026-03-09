@@ -115,6 +115,7 @@ export function SignatureTracker({ companyId }: Props) {
         documentType: doc?.document_type || '',
         refMonth: doc?.ref_month || null,
         employeeName: s.employees?.nome || '',
+        employeeId: s.employee_id,
         status: s.status,
         signedAt: s.signed_at,
         signedVia: s.signed_via,
@@ -123,6 +124,7 @@ export function SignatureTracker({ companyId }: Props) {
         userAgent: s.user_agent,
         documentHash: s.document_hash,
         acceptanceText: s.acceptance_text,
+        selfieUrl: s.selfie_url || null,
       };
     });
 
