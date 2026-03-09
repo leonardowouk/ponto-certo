@@ -112,21 +112,21 @@ export default function PortalDocuments() {
     setLoading(false);
   };
 
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerLoading, setViewerLoading] = useState(false);
+
   const handleView = async (fileUrl: string) => {
-    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 300);
+    setViewerLoading(true);
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 3600);
     if (error || !data?.signedUrl) {
       toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível gerar o link do arquivo.', variant: 'destructive' });
+      setViewerLoading(false);
       return;
     }
-    const newWindow = window.open(data.signedUrl, '_blank');
-    if (!newWindow) {
-      // Popup blocked - fallback to link
-      const a = document.createElement('a');
-      a.href = data.signedUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.click();
-    }
+    setViewerUrl(data.signedUrl);
+    setViewerOpen(true);
+    setViewerLoading(false);
     if (signingDoc) setDocViewed(true);
   };
 
