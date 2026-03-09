@@ -56,8 +56,6 @@ async function saveSinglePage(
   requiresSignature: boolean,
   userId: string,
 ) {
-  // Load a fresh copy from raw bytes and remove unwanted pages
-  // This preserves encrypted content instead of copying to a new doc (which results in blank pages)
   const freshDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
   const totalPages = freshDoc.getPageCount();
   for (let i = totalPages - 1; i >= 0; i--) {
@@ -125,23 +123,85 @@ serve(async (req) => {
 
     const contentType = req.headers.get('content-type') || '';
 
-    // --- Manual assignment (JSON body) ---
+    // --- JSON body actions ---
     if (contentType.includes('application/json')) {
       const body = await req.json();
+
+      // --- Confirm all: save multiple pages at once ---
+      if (body.action === 'confirm_all') {
+        const { storage_path, assignments, company_id, ref_month, title: docTitle, requires_signature } = body;
+        // assignments: Array<{ page: number; employee_id: string; employee_name: string }>
+
+        if (!storage_path || !assignments?.length || !company_id || !ref_month) {
+          return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
+        if (downloadError || !fileData) {
+          return new Response(JSON.stringify({ error: 'Arquivo temporário não encontrado.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
+        const results: Array<{ page: number; status: string; document_id?: string; error?: string }> = [];
+
+        for (const assignment of assignments) {
+          try {
+            const docId = await saveSinglePage(
+              supabase, pdfBytes, assignment.page - 1,
+              { id: assignment.employee_id, nome: assignment.employee_name },
+              company_id, ref_month, docTitle || 'Holerite',
+              requires_signature !== false, user.id,
+            );
+            results.push({ page: assignment.page, status: 'saved', document_id: docId });
+          } catch (e: any) {
+            console.error(`[split-holerites] Error saving page ${assignment.page}:`, e);
+            results.push({ page: assignment.page, status: 'error', error: e.message });
+          }
+        }
+
+        return new Response(JSON.stringify({ success: true, results }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // --- Preview single page: return PDF bytes as base64 ---
+      if (body.action === 'preview_page') {
+        const { storage_path, page } = body;
+        if (!storage_path || page == null) {
+          return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
+        if (downloadError || !fileData) {
+          return new Response(JSON.stringify({ error: 'Arquivo não encontrado.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
+        const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
+        const freshDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+        const totalPages = freshDoc.getPageCount();
+        for (let i = totalPages - 1; i >= 0; i--) {
+          if (i !== page - 1) freshDoc.removePage(i);
+        }
+        const singlePageBytes = await freshDoc.save();
+
+        return new Response(singlePageBytes, {
+          headers: { ...corsHeaders, 'Content-Type': 'application/pdf' },
+        });
+      }
+
+      // --- Manual assignment (single page, legacy) ---
       const { storage_path, page, employee_id, employee_name, company_id, ref_month, title: docTitle, requires_signature } = body;
 
       if (!storage_path || page == null || !employee_id || !company_id || !ref_month) {
         return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      // Download the temp PDF from storage
       const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
       if (downloadError || !fileData) {
         return new Response(JSON.stringify({ error: 'Arquivo temporário não encontrado.' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
-      const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
 
       const docId = await saveSinglePage(
         supabase, pdfBytes, page - 1,
@@ -162,6 +222,7 @@ serve(async (req) => {
     const refMonth = formData.get('ref_month') as string;
     const title = formData.get('title') as string || 'Holerite';
     const requiresSignature = formData.get('requires_signature') !== 'false';
+    const dryRun = formData.get('dry_run') === 'true';
 
     if (!file || !companyId || !refMonth) {
       return new Response(
@@ -170,14 +231,14 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[split-holerites] Processing PDF: ${file.name}, size: ${file.size}`);
+    console.log(`[split-holerites] Processing PDF: ${file.name}, size: ${file.size}, dryRun: ${dryRun}`);
 
     const pdfBytes = new Uint8Array(await file.arrayBuffer());
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const totalPages = pdfDoc.getPageCount();
     console.log(`[split-holerites] PDF has ${totalPages} pages`);
 
-    // Upload original PDF to temp storage for manual assignment later
+    // Upload original PDF to temp storage
     const tempPath = `${companyId}/temp/bulk_${Date.now()}.pdf`;
     await supabase.storage.from('documentos').upload(tempPath, pdfBytes, { contentType: 'application/pdf', upsert: true });
 
@@ -197,7 +258,6 @@ serve(async (req) => {
     console.log(`[split-holerites] Found ${employees.length} employees`);
 
     const pdfBase64 = base64Encode(pdfBytes);
-
     const employeeNames = employees.map(e => e.nome).join(', ');
 
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -276,12 +336,17 @@ IMPORTANTE: Retorne SOMENTE o JSON, sem markdown, sem explicação, sem \`\`\`.`
         continue;
       }
 
-      try {
-        const docId = await saveSinglePage(supabase, pdfBytes, i, matched, companyId, refMonth, title, requiresSignature, user.id);
-        results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'matched', document_id: docId });
-      } catch (pageError) {
-        console.error(`[split-holerites] Error page ${pageNum}:`, pageError);
-        results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'error' });
+      if (dryRun) {
+        // Don't save, just return the mapping for review
+        results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'matched' });
+      } else {
+        try {
+          const docId = await saveSinglePage(supabase, pdfBytes, i, matched, companyId, refMonth, title, requiresSignature, user.id);
+          results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'matched', document_id: docId });
+        } catch (pageError) {
+          console.error(`[split-holerites] Error page ${pageNum}:`, pageError);
+          results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'error' });
+        }
       }
     }
 
@@ -292,9 +357,10 @@ IMPORTANTE: Retorne SOMENTE o JSON, sem markdown, sem explicação, sem \`\`\`.`
       errors: results.filter(r => r.status === 'error').length,
       results,
       temp_storage_path: tempPath,
+      dry_run: dryRun,
     };
 
-    console.log(`[split-holerites] Done. Matched: ${summary.matched}, Unmatched: ${summary.unmatched}`);
+    console.log(`[split-holerites] Done. Matched: ${summary.matched}, Unmatched: ${summary.unmatched}, DryRun: ${dryRun}`);
 
     return new Response(JSON.stringify(summary), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save } from 'lucide-react';
+import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save, Eye, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface Props {
@@ -34,6 +35,7 @@ interface SplitSummary {
   errors: number;
   results: SplitResult[];
   temp_storage_path?: string;
+  dry_run?: boolean;
 }
 
 const getMonthOptions = () => {
@@ -60,6 +62,13 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
   const [employees, setEmployees] = useState<{ id: string; nome: string }[]>([]);
   const [manualAssignments, setManualAssignments] = useState<Record<number, string>>({});
   const [savingPages, setSavingPages] = useState<Record<number, boolean>>({});
+  const [confirming, setConfirming] = useState(false);
+
+  // Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewPage, setPreviewPage] = useState<number | null>(null);
 
   useEffect(() => {
     if (companyId) {
@@ -88,6 +97,7 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
       formData.append('ref_month', refMonth);
       formData.append('title', title);
       formData.append('requires_signature', String(requiresSignature));
+      formData.append('dry_run', 'true');
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const response = await fetch(
@@ -108,16 +118,136 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
       setSummary(result);
 
       toast({
-        title: 'Processamento concluído!',
-        description: `${result.matched} de ${result.total_pages} holerites distribuídos com sucesso.`,
+        title: 'Análise concluída!',
+        description: `${result.matched} de ${result.total_pages} holerites identificados. Revise antes de confirmar.`,
       });
-
-      if (result.matched > 0) onUploaded();
     } catch (error: any) {
       console.error('Bulk upload error:', error);
       toast({ title: 'Erro no processamento', description: error.message, variant: 'destructive' });
     } finally {
       setProcessing(false);
+    }
+  };
+
+  const handlePreviewPage = async (page: number) => {
+    if (!summary?.temp_storage_path) return;
+
+    setPreviewLoading(true);
+    setPreviewPage(page);
+    setPreviewOpen(true);
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/split-holerites`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'preview_page',
+            storage_path: summary.temp_storage_path,
+            page,
+          }),
+        }
+      );
+
+      if (!response.ok) throw new Error('Erro ao carregar preview');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } catch (error: any) {
+      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      setPreviewOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    setPreviewOpen(false);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    setPreviewPage(null);
+  };
+
+  const handleConfirmAll = async () => {
+    if (!summary?.temp_storage_path || !companyId) return;
+
+    // Build assignments: matched + manually assigned
+    const assignments: Array<{ page: number; employee_id: string; employee_name: string }> = [];
+
+    for (const r of summary.results) {
+      if (r.status === 'matched' && r.matched_employee) {
+        assignments.push({ page: r.page, employee_id: r.matched_employee.id, employee_name: r.matched_employee.nome });
+      } else if (r.status === 'unmatched' && manualAssignments[r.page]) {
+        const emp = employees.find(e => e.id === manualAssignments[r.page]);
+        if (emp) {
+          assignments.push({ page: r.page, employee_id: emp.id, employee_name: emp.nome });
+        }
+      }
+    }
+
+    if (assignments.length === 0) {
+      toast({ title: 'Nenhum holerite para salvar', variant: 'destructive' });
+      return;
+    }
+
+    setConfirming(true);
+
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/split-holerites`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'confirm_all',
+            storage_path: summary.temp_storage_path,
+            assignments,
+            company_id: companyId,
+            ref_month: refMonth,
+            title,
+            requires_signature: requiresSignature,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Erro' }));
+        throw new Error(err.error || 'Erro ao salvar');
+      }
+
+      const result = await response.json();
+      const saved = result.results?.filter((r: any) => r.status === 'saved').length || 0;
+      const errors = result.results?.filter((r: any) => r.status === 'error').length || 0;
+
+      toast({
+        title: 'Holerites salvos!',
+        description: `${saved} holerite(s) distribuído(s) com sucesso.${errors > 0 ? ` ${errors} erro(s).` : ''}`,
+      });
+
+      onUploaded();
+      resetForm();
+    } catch (error: any) {
+      toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -163,7 +293,6 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
 
       const result = await response.json();
 
-      // Update summary
       setSummary(prev => {
         if (!prev) return prev;
         const updatedResults = prev.results.map(r =>
@@ -206,201 +335,265 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
 
   const statusLabel = (status: string) => {
     switch (status) {
-      case 'matched': return <Badge className="bg-green-100 text-green-800">Distribuído</Badge>;
+      case 'matched': return <Badge className="bg-green-100 text-green-800">Identificado</Badge>;
       case 'unmatched': return <Badge className="bg-yellow-100 text-yellow-800">Não identificado</Badge>;
       case 'error': return <Badge variant="destructive">Erro</Badge>;
       default: return <Badge variant="outline">-</Badge>;
     }
   };
 
-  // Get already-assigned employee IDs to filter them out of manual selects
   const assignedEmployeeIds = new Set(
     summary?.results.filter(r => r.status === 'matched' && r.matched_employee).map(r => r.matched_employee!.id) || []
   );
 
   const unmatchedCount = summary?.results.filter(r => r.status === 'unmatched').length || 0;
+  const isDryRun = summary?.dry_run === true;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-primary" />
-          Upload Inteligente de Holerites
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Envie o PDF completo com todos os holerites. O sistema usa IA para identificar cada colaborador e distribuir automaticamente.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!summary && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Título base</Label>
-                <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Holerite" />
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            Upload Inteligente de Holerites
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Envie o PDF completo com todos os holerites. O sistema usa IA para identificar cada colaborador. Você poderá revisar e visualizar cada página antes de confirmar.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!summary && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Título base</Label>
+                  <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Holerite" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Mês de Referência</Label>
+                  <Select value={refMonth} onValueChange={setRefMonth}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {getMonthOptions().map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Arquivo PDF (todos os holerites)</Label>
+                  <div
+                    className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    {file ? (
+                      <p className="text-sm font-medium">{file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Clique para selecionar o PDF</p>
+                    )}
+                    <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Mês de Referência</Label>
-                <Select value={refMonth} onValueChange={setRefMonth}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {getMonthOptions().map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Arquivo PDF (todos os holerites)</Label>
-                <div
-                  className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <FileUp className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-                  {file ? (
-                    <p className="text-sm font-medium">{file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)</p>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox checked={requiresSignature} onCheckedChange={(v) => setRequiresSignature(!!v)} />
+                  <span className="text-sm">Requer assinatura do colaborador</span>
+                </label>
+
+                <Button onClick={handleProcess} disabled={processing || !file || !companyId}>
+                  {processing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Analisando com IA...
+                    </>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Clique para selecionar o PDF</p>
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Analisar e Revisar
+                    </>
                   )}
-                  <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
+                </Button>
+              </div>
+
+              {processing && (
+                <div className="space-y-2 py-4">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Analisando cada página com IA para identificar os colaboradores...</span>
+                  </div>
+                  <Progress value={undefined} className="h-2" />
+                  <p className="text-xs text-muted-foreground">Isso pode levar alguns segundos por página.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {summary && (
+            <div className="space-y-4">
+              {isDryRun && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                    📋 Modo de revisão — Nenhum documento foi salvo ainda. Verifique cada página clicando em "Ver" e depois clique em "Confirmar e Salvar Todos".
+                  </p>
+                </div>
+              )}
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-green-700 dark:text-green-400">{summary.matched}</p>
+                  <p className="text-sm text-green-600 dark:text-green-500">Identificados</p>
+                </div>
+                <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unmatchedCount}</p>
+                  <p className="text-sm text-yellow-600 dark:text-yellow-500">Não identificados</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold">{summary.total_pages}</p>
+                  <p className="text-sm text-muted-foreground">Total de páginas</p>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox checked={requiresSignature} onCheckedChange={(v) => setRequiresSignature(!!v)} />
-                <span className="text-sm">Requer assinatura do colaborador</span>
-              </label>
-
-              <Button onClick={handleProcess} disabled={processing || !file || !companyId}>
-                {processing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Processando com IA...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Processar e Distribuir
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {processing && (
-              <div className="space-y-2 py-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Analisando cada página com IA para identificar os colaboradores...</span>
+              {unmatchedCount > 0 && (
+                <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                  <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
+                    {unmatchedCount} página(s) não identificada(s). Selecione o colaborador manualmente abaixo.
+                  </p>
                 </div>
-                <Progress value={undefined} className="h-2" />
-                <p className="text-xs text-muted-foreground">Isso pode levar alguns segundos por página.</p>
-              </div>
-            )}
-          </>
-        )}
+              )}
 
-        {summary && (
-          <div className="space-y-4">
-            {/* Summary cards */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-green-700 dark:text-green-400">{summary.matched}</p>
-                <p className="text-sm text-green-600 dark:text-green-500">Distribuídos</p>
-              </div>
-              <div className="bg-yellow-50 dark:bg-yellow-950/30 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{unmatchedCount}</p>
-                <p className="text-sm text-yellow-600 dark:text-yellow-500">Não identificados</p>
-              </div>
-              <div className="bg-muted/50 rounded-lg p-4 text-center">
-                <p className="text-2xl font-bold">{summary.total_pages}</p>
-                <p className="text-sm text-muted-foreground">Total de páginas</p>
-              </div>
-            </div>
-
-            {unmatchedCount > 0 && (
-              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-                  {unmatchedCount} página(s) não identificada(s). Selecione o colaborador manualmente abaixo e clique em "Vincular".
-                </p>
-              </div>
-            )}
-
-            {/* Results table */}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">Página</TableHead>
-                  <TableHead>Nome Extraído (IA)</TableHead>
-                  <TableHead>Colaborador Vinculado</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-center w-28">Ação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.results.map(r => (
-                  <TableRow key={r.page}>
-                    <TableCell className="font-mono">{r.page}</TableCell>
-                    <TableCell className="text-sm">{r.extracted_name || <span className="text-muted-foreground italic">Não encontrado</span>}</TableCell>
-                    <TableCell>
-                      {r.status === 'matched' && r.matched_employee ? (
-                        <span className="font-medium">{r.matched_employee.nome}</span>
-                      ) : r.status === 'unmatched' ? (
-                        <Select
-                          value={manualAssignments[r.page] || ''}
-                          onValueChange={(v) => setManualAssignments(prev => ({ ...prev, [r.page]: v }))}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Selecione o colaborador..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {employees
-                              .filter(e => !assignedEmployeeIds.has(e.id))
-                              .map(e => (
-                                <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-muted-foreground italic">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {statusIcon(r.status)}
-                        {statusLabel(r.status)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {r.status === 'unmatched' && (
-                        <Button
-                          size="sm"
-                          disabled={!manualAssignments[r.page] || savingPages[r.page]}
-                          onClick={() => handleManualAssign(r.page)}
-                        >
-                          {savingPages[r.page] ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <>
-                              <Save className="w-3 h-3 mr-1" />
-                              Vincular
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </TableCell>
+              {/* Results table */}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-16">Página</TableHead>
+                    <TableHead>Nome Extraído (IA)</TableHead>
+                    <TableHead>Colaborador Vinculado</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-center w-36">Ações</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {summary.results.map(r => (
+                    <TableRow key={r.page}>
+                      <TableCell className="font-mono">{r.page}</TableCell>
+                      <TableCell className="text-sm">{r.extracted_name || <span className="text-muted-foreground italic">Não encontrado</span>}</TableCell>
+                      <TableCell>
+                        {r.status === 'matched' && r.matched_employee ? (
+                          <span className="font-medium">{r.matched_employee.nome}</span>
+                        ) : r.status === 'unmatched' ? (
+                          <Select
+                            value={manualAssignments[r.page] || ''}
+                            onValueChange={(v) => setManualAssignments(prev => ({ ...prev, [r.page]: v }))}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Selecione o colaborador..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {employees
+                                .filter(e => !assignedEmployeeIds.has(e.id))
+                                .map(e => (
+                                  <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-muted-foreground italic">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {statusIcon(r.status)}
+                          {statusLabel(r.status)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePreviewPage(r.page)}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            Ver
+                          </Button>
+                          {!isDryRun && r.status === 'unmatched' && (
+                            <Button
+                              size="sm"
+                              disabled={!manualAssignments[r.page] || savingPages[r.page]}
+                              onClick={() => handleManualAssign(r.page)}
+                            >
+                              {savingPages[r.page] ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Save className="w-3 h-3 mr-1" />
+                                  Vincular
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={resetForm}>
-                Processar outro arquivo
-              </Button>
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={resetForm}>
+                  Cancelar
+                </Button>
+
+                {isDryRun && (
+                  <Button onClick={handleConfirmAll} disabled={confirming} className="gap-2">
+                    {confirming ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Confirmar e Salvar Todos ({summary.matched + Object.keys(manualAssignments).length})
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {!isDryRun && (
+                  <Button variant="outline" onClick={resetForm}>
+                    Processar outro arquivo
+                  </Button>
+                )}
+              </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Page Preview Modal */}
+      <Dialog open={previewOpen} onOpenChange={(open) => { if (!open) handleClosePreview(); }}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Visualizar Página {previewPage}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                src={previewUrl}
+                className="w-full h-full rounded-lg border"
+                title={`Página ${previewPage}`}
+              />
+            ) : null}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
