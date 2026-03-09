@@ -294,31 +294,80 @@ export default function PortalLogin() {
       </Card>
 
       {showForgot && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <Card className="w-full max-w-md card-elevated-lg">
             <CardHeader>
               <CardTitle>Recuperar senha</CardTitle>
-              <CardDescription>Informe o email cadastrado para receber o link de recuperação.</CardDescription>
+              <CardDescription>Escolha como deseja recuperar sua senha.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleForgotPassword} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input type="email" placeholder="seu@email.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className="pl-10" disabled={forgotLoading} />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForgot(false)} disabled={forgotLoading}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" className="flex-1" disabled={forgotLoading}>
-                    {forgotLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Enviar
-                  </Button>
-                </div>
-              </form>
+              <Tabs value={forgotMethod} onValueChange={(v) => setForgotMethod(v as 'email' | 'cpfpin')}>
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="email">Via Email</TabsTrigger>
+                  <TabsTrigger value="cpfpin">Via CPF + PIN</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="email">
+                  <form onSubmit={handleForgotEmail} className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Enviaremos um link de recuperação para seu email cadastrado.</p>
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input type="email" placeholder="seu@email.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className="pl-10" disabled={forgotLoading} />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" className="flex-1" onClick={resetForgotState} disabled={forgotLoading}>Cancelar</Button>
+                      <Button type="submit" className="flex-1" disabled={forgotLoading}>
+                        {forgotLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Enviar
+                      </Button>
+                    </div>
+                  </form>
+                </TabsContent>
+
+                <TabsContent value="cpfpin">
+                  <form onSubmit={handleForgotCpfPin} className="space-y-4">
+                    <p className="text-sm text-muted-foreground">Informe seu CPF e PIN para redefinir a senha imediatamente.</p>
+                    <div className="space-y-2">
+                      <Label>CPF</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input placeholder="000.000.000-00" value={forgotCpf} onChange={e => setForgotCpf(formatCPF(e.target.value))} className="pl-10" disabled={forgotLoading} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>PIN</Label>
+                      <div className="relative">
+                        <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input type="password" placeholder="••••" maxLength={6} value={forgotPin} onChange={e => setForgotPin(e.target.value.replace(/\D/g, ''))} className="pl-10" disabled={forgotLoading} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Nova senha</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="pl-10" disabled={forgotLoading} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Confirmar nova senha</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input type="password" placeholder="Repita a senha" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} className="pl-10" disabled={forgotLoading} />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" className="flex-1" onClick={resetForgotState} disabled={forgotLoading}>Cancelar</Button>
+                      <Button type="submit" className="flex-1" disabled={forgotLoading}>
+                        {forgotLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Redefinir
+                      </Button>
+                    </div>
+                  </form>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
