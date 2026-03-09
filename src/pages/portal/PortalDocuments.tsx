@@ -118,16 +118,25 @@ export default function PortalDocuments() {
 
   const handleView = async (fileUrl: string) => {
     setViewerLoading(true);
-    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 3600);
-    if (error || !data?.signedUrl) {
-      toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível gerar o link do arquivo.', variant: 'destructive' });
-      setViewerLoading(false);
-      return;
-    }
-    setViewerUrl(data.signedUrl);
     setViewerOpen(true);
-    setViewerLoading(false);
-    if (signingDoc) setDocViewed(true);
+
+    try {
+      const { data, error } = await supabase.storage.from('documentos').download(fileUrl);
+      if (error || !data) {
+        toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível carregar o arquivo.', variant: 'destructive' });
+        setViewerOpen(false);
+        setViewerLoading(false);
+        return;
+      }
+      const blobUrl = URL.createObjectURL(data);
+      setViewerUrl(blobUrl);
+      if (signingDoc) setDocViewed(true);
+    } catch (err: any) {
+      toast({ title: 'Erro ao abrir documento', description: err.message, variant: 'destructive' });
+      setViewerOpen(false);
+    } finally {
+      setViewerLoading(false);
+    }
   };
 
   const getAcceptanceText = (title: string) =>
@@ -406,7 +415,12 @@ export default function PortalDocuments() {
         </DialogContent>
       </Dialog>
       {/* Document Viewer Dialog */}
-      <Dialog open={viewerOpen} onOpenChange={(open) => { if (!open) { setViewerOpen(false); setViewerUrl(null); } }}>
+      <Dialog open={viewerOpen} onOpenChange={(open) => { 
+        if (!open) { 
+          setViewerOpen(false); 
+          if (viewerUrl) { URL.revokeObjectURL(viewerUrl); setViewerUrl(null); }
+        } 
+      }}>
         <DialogContent className="max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
           <DialogHeader className="p-4 pb-2">
             <DialogTitle className="flex items-center justify-between">
@@ -415,7 +429,7 @@ export default function PortalDocuments() {
                 Visualizar Documento
               </span>
               {viewerUrl && (
-                <a href={viewerUrl} download target="_blank" rel="noopener noreferrer">
+                <a href={viewerUrl} download="documento.pdf">
                   <Button variant="outline" size="sm">
                     <Download className="w-3 h-3 mr-1" /> Baixar
                   </Button>
@@ -424,17 +438,18 @@ export default function PortalDocuments() {
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 min-h-0 px-4 pb-4">
-            {viewerUrl ? (
+            {viewerLoading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Carregando documento...</p>
+              </div>
+            ) : viewerUrl ? (
               <iframe
-                src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerUrl)}`}
+                src={viewerUrl}
                 className="w-full h-full rounded-lg border"
                 title="Visualização do documento"
               />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-8 h-8 animate-spin" />
-              </div>
-            )}
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
