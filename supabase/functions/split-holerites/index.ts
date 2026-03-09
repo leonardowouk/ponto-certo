@@ -277,7 +277,7 @@ IMPORTANTE: Retorne SOMENTE o JSON, sem markdown, sem explicação, sem \`\`\`.`
       }
 
       try {
-        const docId = await saveSinglePage(supabase, pdfDoc, i, matched, companyId, refMonth, title, requiresSignature, user.id);
+        const docId = await saveSinglePage(supabase, pdfBytes, i, matched, companyId, refMonth, title, requiresSignature, user.id);
         results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'matched', document_id: docId });
       } catch (pageError) {
         console.error(`[split-holerites] Error page ${pageNum}:`, pageError);
