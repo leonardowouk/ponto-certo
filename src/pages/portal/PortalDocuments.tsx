@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink, Camera } from 'lucide-react';
+import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink, Camera, Download } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
