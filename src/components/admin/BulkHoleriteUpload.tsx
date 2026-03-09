@@ -137,31 +137,13 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
     setPreviewOpen(true);
 
     try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      // Download the full original PDF from storage and navigate to the specific page
+      const { data, error } = await supabase.storage.from('documentos').download(summary.temp_storage_path);
+      if (error || !data) throw new Error('Erro ao carregar PDF');
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/split-holerites`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'preview_page',
-            storage_path: summary.temp_storage_path,
-            page,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error('Erro ao carregar preview');
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      setPreviewUrl(url);
+      const url = URL.createObjectURL(data);
+      // Use #page=N to navigate to the specific page in the PDF viewer
+      setPreviewUrl(`${url}#page=${page}`);
     } catch (error: any) {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       setPreviewOpen(false);
