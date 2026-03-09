@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck, FileText, ExternalLink } from 'lucide-react';
+import { Loader2, ShieldCheck, FileText, ExternalLink, CheckCircle2 } from 'lucide-react';
 
 interface Props {
   open: boolean;
@@ -16,9 +16,10 @@ interface Props {
   employeeName: string;
   documentTitle: string;
   fileUrl: string;
+  signatureId?: string;
 }
 
-export function DocumentSignatureModal({ open, onClose, documentId, employeeId, employeeName, documentTitle, fileUrl }: Props) {
+export function DocumentSignatureModal({ open, onClose, documentId, employeeId, employeeName, documentTitle, fileUrl, signatureId }: Props) {
   const { toast } = useToast();
   const [pin, setPin] = useState('');
   const [notes, setNotes] = useState('');
@@ -32,57 +33,54 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
     }
   };
 
+  const getAcceptanceText = () =>
+    `Assinatura presencial registrada via painel administrativo. Colaborador "${employeeName}" confirmou ciência do documento "${documentTitle}" com verificação de PIN. Conforme Art. 10, §2º da MP 2.200-2/2001.`;
+
   const handleSign = async () => {
     if (!pin || pin.length < 4) {
       toast({ title: 'PIN obrigatório', description: 'Digite o PIN do colaborador para confirmar.', variant: 'destructive' });
       return;
     }
 
+    // Need signature_id - find it if not provided
+    let sigId = signatureId;
+    if (!sigId) {
+      const { data: sigData } = await supabase
+        .from('document_signatures')
+        .select('id')
+        .eq('document_id', documentId)
+        .eq('employee_id', employeeId)
+        .single();
+      sigId = sigData?.id;
+    }
+
+    if (!sigId) {
+      toast({ title: 'Erro', description: 'Registro de assinatura não encontrado.', variant: 'destructive' });
+      return;
+    }
+
     setSigning(true);
 
-    // Verify PIN via edge function
-    const { data: empData } = await supabase
-      .from('employees')
-      .select('pin_hash')
-      .eq('id', employeeId)
-      .single();
-
-    if (!empData) {
-      toast({ title: 'Erro', description: 'Colaborador não encontrado.', variant: 'destructive' });
-      setSigning(false);
-      return;
-    }
-
-    // Verify PIN using hash-pin function
-    const { data: hashResult } = await supabase.functions.invoke('hash-pin', {
-      body: { pin, salt: empData.pin_hash.split(':')[0] },
+    const { data, error } = await supabase.functions.invoke('sign-document', {
+      body: {
+        signature_id: sigId,
+        pin,
+        acceptance_text: getAcceptanceText() + (notes.trim() ? ` Obs: ${notes.trim()}` : ''),
+        signed_via: 'admin',
+      },
     });
 
-    const pinMatch = hashResult?.hash === empData.pin_hash;
-
-    if (!pinMatch) {
-      toast({ title: 'PIN incorreto', description: 'O PIN informado não confere.', variant: 'destructive' });
-      setSigning(false);
-      return;
-    }
-
-    // Register signature
-    const { error } = await supabase
-      .from('document_signatures')
-      .update({
-        status: 'assinado' as any,
-        signed_at: new Date().toISOString(),
-        signed_via: 'admin',
-        pin_verified: true,
-        notes: notes.trim() || null,
-      })
-      .eq('document_id', documentId)
-      .eq('employee_id', employeeId);
-
-    if (error) {
-      toast({ title: 'Erro ao registrar assinatura', description: error.message, variant: 'destructive' });
+    if (error || data?.error) {
+      toast({
+        title: 'Erro ao registrar assinatura',
+        description: data?.error || error?.message || 'Tente novamente.',
+        variant: 'destructive',
+      });
     } else {
-      toast({ title: 'Assinatura registrada!', description: `${employeeName} assinou "${documentTitle}" com sucesso.` });
+      toast({
+        title: 'Assinatura registrada!',
+        description: `${employeeName} assinou "${documentTitle}" com sucesso. Hash: ${data?.document_hash?.substring(0, 16)}...`,
+      });
       onClose();
     }
 
@@ -126,6 +124,14 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
 
           {step === 'confirm' && (
             <>
+              {/* Acceptance info */}
+              <div className="bg-muted/30 rounded-lg p-3 border text-xs leading-relaxed">
+                <p className="flex items-center gap-1 mb-1 font-medium text-sm">
+                  <CheckCircle2 className="w-3 h-3" /> Termo de Aceite
+                </p>
+                {getAcceptanceText()}
+              </div>
+
               <div className="space-y-2">
                 <Label>PIN do Colaborador</Label>
                 <Input
@@ -152,7 +158,7 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
         {step === 'confirm' && (
           <DialogFooter>
             <Button variant="outline" onClick={() => setStep('view')}>Voltar</Button>
-            <Button onClick={handleSign} disabled={signing || !pin}>
+            <Button onClick={handleSign} disabled={signing || !pin || pin.length < 4}>
               {signing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
               Confirmar Assinatura
             </Button>

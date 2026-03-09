@@ -5,14 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileText, Eye, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink } from 'lucide-react';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
 
 interface DocItem {
   id: string;
@@ -42,6 +44,18 @@ export default function PortalDocuments() {
   const [signingDoc, setSigningDoc] = useState<DocItem | null>(null);
   const [signing, setSigning] = useState(false);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
+
+  // Signing flow state
+  const [pin, setPin] = useState('');
+  const [accepted, setAccepted] = useState(false);
+  const [docViewed, setDocViewed] = useState(false);
+
+  const resetSigningState = () => {
+    setSigningDoc(null);
+    setPin('');
+    setAccepted(false);
+    setDocViewed(false);
+  };
 
   useEffect(() => {
     loadDocs();
@@ -95,31 +109,45 @@ export default function PortalDocuments() {
 
   const handleView = async (fileUrl: string) => {
     const { data } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 300);
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank');
+      if (signingDoc) setDocViewed(true);
+    }
   };
 
+  const getAcceptanceText = (title: string) =>
+    `Declaro que li e estou de acordo com o conteúdo do documento "${title}". Esta assinatura digital tem validade jurídica conforme Art. 10, §2º da MP 2.200-2/2001.`;
+
   const handleSign = async () => {
-    if (!signingDoc?.signature_id) return;
+    if (!signingDoc?.signature_id || !pin || !accepted) return;
     setSigning(true);
 
-    const { error } = await supabase
-      .from('document_signatures')
-      .update({
-        status: 'assinado',
-        signed_at: new Date().toISOString(),
-        signed_via: 'portal',
-        pin_verified: true,
-      })
-      .eq('id', signingDoc.signature_id);
+    const acceptanceText = getAcceptanceText(signingDoc.title);
 
-    if (error) {
-      toast({ title: 'Erro ao assinar', description: error.message, variant: 'destructive' });
+    const { data, error } = await supabase.functions.invoke('sign-document', {
+      body: {
+        signature_id: signingDoc.signature_id,
+        pin,
+        acceptance_text: acceptanceText,
+        signed_via: 'portal',
+      },
+    });
+
+    if (error || data?.error) {
+      toast({
+        title: 'Erro ao assinar',
+        description: data?.error || error?.message || 'Tente novamente.',
+        variant: 'destructive',
+      });
     } else {
-      toast({ title: 'Documento assinado com sucesso!' });
+      toast({
+        title: 'Documento assinado com sucesso!',
+        description: `Hash: ${data?.document_hash?.substring(0, 16)}...`,
+      });
       loadDocs();
     }
     setSigning(false);
-    setSigningDoc(null);
+    resetSigningState();
   };
 
   const pendingDocs = docs.filter(d => d.requires_signature && d.signature_status === 'pendente');
@@ -230,25 +258,81 @@ export default function PortalDocuments() {
         </Card>
       </div>
 
-      <AlertDialog open={!!signingDoc} onOpenChange={() => setSigningDoc(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Assinar documento</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você está prestes a assinar o documento <strong>"{signingDoc?.title}"</strong>.
-              Ao confirmar, sua assinatura digital será registrada com data, hora e IP.
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={signing}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSign} disabled={signing}>
-              {signing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+      {/* Robust Signing Dialog */}
+      <Dialog open={!!signingDoc} onOpenChange={() => resetSigningState()}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5" />
+              Assinatura Digital
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Document info */}
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <span className="font-medium">{signingDoc?.title}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => signingDoc && handleView(signingDoc.file_url)}>
+                <ExternalLink className="w-3 h-3 mr-1" />
+                Visualizar Documento
+              </Button>
+              {docViewed && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Documento visualizado
+                </p>
+              )}
+            </div>
+
+            {/* Acceptance text */}
+            <div className="bg-muted/30 rounded-lg p-4 border">
+              <p className="text-sm leading-relaxed">
+                {signingDoc && getAcceptanceText(signingDoc.title)}
+              </p>
+            </div>
+
+            {/* Checkbox */}
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="accept-terms"
+                checked={accepted}
+                onCheckedChange={(checked) => setAccepted(checked === true)}
+              />
+              <Label htmlFor="accept-terms" className="text-sm leading-relaxed cursor-pointer">
+                Li o documento e concordo com o termo acima. Entendo que esta assinatura tem validade jurídica.
+              </Label>
+            </div>
+
+            {/* PIN */}
+            <div className="space-y-2">
+              <Label>PIN de Confirmação</Label>
+              <Input
+                type="password"
+                maxLength={6}
+                value={pin}
+                onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="Digite seu PIN de 4-6 dígitos"
+              />
+              <p className="text-xs text-muted-foreground">
+                Seu PIN pessoal é necessário para confirmar a identidade.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={resetSigningState}>Cancelar</Button>
+            <Button
+              onClick={handleSign}
+              disabled={signing || !pin || pin.length < 4 || !accepted}
+            >
+              {signing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
               Confirmar Assinatura
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PortalLayout>
   );
 }
