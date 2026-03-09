@@ -43,6 +43,7 @@ interface SignatureRow {
   documentType: string;
   refMonth: string | null;
   employeeName: string;
+  employeeId: string;
   status: string;
   signedAt: string | null;
   signedVia: string | null;
@@ -51,6 +52,7 @@ interface SignatureRow {
   userAgent: string | null;
   documentHash: string | null;
   acceptanceText: string | null;
+  selfieUrl: string | null;
 }
 
 export function SignatureTracker({ companyId }: Props) {
