@@ -17,8 +17,35 @@ export default function PortalLogin() {
   const [cpf, setCpf] = useState('');
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      toast({ title: 'Informe seu email', variant: 'destructive' });
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/portal/reset-password`,
+      });
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+        return;
+      }
+      toast({ title: 'Email enviado!', description: 'Verifique sua caixa de entrada para redefinir a senha.' });
+      setShowForgot(false);
+    } catch {
+      toast({ title: 'Erro de conexão', variant: 'destructive' });
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const formatCPF = (val: string) => {
     const nums = val.replace(/\D/g, '').slice(0, 11);
@@ -145,6 +172,13 @@ export default function PortalLogin() {
                   {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Entrar
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="w-full text-sm text-muted-foreground hover:text-primary transition-colors mt-2"
+                >
+                  Esqueci minha senha
+                </button>
               </form>
             </TabsContent>
 
@@ -194,6 +228,37 @@ export default function PortalLogin() {
           </div>
         </CardContent>
       </Card>
+
+      {showForgot && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md card-elevated-lg">
+            <CardHeader>
+              <CardTitle>Recuperar senha</CardTitle>
+              <CardDescription>Informe o email cadastrado para receber o link de recuperação.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input type="email" placeholder="seu@email.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className="pl-10" disabled={forgotLoading} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForgot(false)} disabled={forgotLoading}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" className="flex-1" disabled={forgotLoading}>
+                    {forgotLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Enviar
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

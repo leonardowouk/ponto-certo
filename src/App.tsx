@@ -22,6 +22,7 @@ import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalTimesheet from "./pages/portal/PortalTimesheet";
 import PortalCorrections from "./pages/portal/PortalCorrections";
 import PortalCertificates from "./pages/portal/PortalCertificates";
+import PortalResetPassword from "./pages/portal/PortalResetPassword";
 import NotFound from "./pages/NotFound";
 import { CompanyProvider } from "./contexts/CompanyContext";
 
@@ -56,6 +57,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/admin/*" element={<AdminRoutes />} />
           <Route path="/portal/login" element={<PortalLogin />} />
+          <Route path="/portal/reset-password" element={<PortalResetPassword />} />
           <Route path="/portal" element={<PortalDashboard />} />
           <Route path="/portal/documents" element={<PortalDocuments />} />
           <Route path="/portal/timesheet" element={<PortalTimesheet />} />
