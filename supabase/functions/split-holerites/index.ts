@@ -144,7 +144,7 @@ serve(async (req) => {
       const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
 
       const docId = await saveSinglePage(
-        supabase, pdfDoc, page - 1,
+        supabase, pdfBytes, page - 1,
         { id: employee_id, nome: employee_name || '' },
         company_id, ref_month, docTitle || 'Holerite',
         requires_signature !== false, user.id,
