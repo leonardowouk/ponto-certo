@@ -228,6 +228,37 @@ export default function PortalLogin() {
           </div>
         </CardContent>
       </Card>
+
+      {showForgot && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md card-elevated-lg">
+            <CardHeader>
+              <CardTitle>Recuperar senha</CardTitle>
+              <CardDescription>Informe o email cadastrado para receber o link de recuperação.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input type="email" placeholder="seu@email.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className="pl-10" disabled={forgotLoading} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowForgot(false)} disabled={forgotLoading}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" className="flex-1" disabled={forgotLoading}>
+                    {forgotLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    Enviar
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
