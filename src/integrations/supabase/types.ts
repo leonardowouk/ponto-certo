@@ -84,7 +84,9 @@ export type Database = {
       }
       document_signatures: {
         Row: {
+          acceptance_text: string | null
           created_at: string | null
+          document_hash: string | null
           document_id: string
           employee_id: string
           id: string
@@ -94,9 +96,12 @@ export type Database = {
           signed_at: string | null
           signed_via: string | null
           status: Database["public"]["Enums"]["signature_status"]
+          user_agent: string | null
         }
         Insert: {
+          acceptance_text?: string | null
           created_at?: string | null
+          document_hash?: string | null
           document_id: string
           employee_id: string
           id?: string
@@ -106,9 +111,12 @@ export type Database = {
           signed_at?: string | null
           signed_via?: string | null
           status?: Database["public"]["Enums"]["signature_status"]
+          user_agent?: string | null
         }
         Update: {
+          acceptance_text?: string | null
           created_at?: string | null
+          document_hash?: string | null
           document_id?: string
           employee_id?: string
           id?: string
@@ -118,6 +126,7 @@ export type Database = {
           signed_at?: string | null
           signed_via?: string | null
           status?: Database["public"]["Enums"]["signature_status"]
+          user_agent?: string | null
         }
         Relationships: [
           {
@@ -646,6 +655,76 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_audit_log: {
+        Row: {
+          acceptance_text: string | null
+          action: string
+          auth_user_id: string | null
+          created_at: string
+          document_hash: string | null
+          document_id: string
+          employee_id: string
+          id: string
+          ip_address: string | null
+          pin_verified: boolean | null
+          signature_id: string
+          signed_via: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          acceptance_text?: string | null
+          action: string
+          auth_user_id?: string | null
+          created_at?: string
+          document_hash?: string | null
+          document_id: string
+          employee_id: string
+          id?: string
+          ip_address?: string | null
+          pin_verified?: boolean | null
+          signature_id: string
+          signed_via?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          acceptance_text?: string | null
+          action?: string
+          auth_user_id?: string | null
+          created_at?: string
+          document_hash?: string | null
+          document_id?: string
+          employee_id?: string
+          id?: string
+          ip_address?: string | null
+          pin_verified?: boolean | null
+          signature_id?: string
+          signed_via?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_audit_log_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "employee_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signature_audit_log_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signature_audit_log_signature_id_fkey"
+            columns: ["signature_id"]
+            isOneToOne: false
+            referencedRelation: "document_signatures"
             referencedColumns: ["id"]
           },
         ]
