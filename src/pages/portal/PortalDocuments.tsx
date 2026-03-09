@@ -405,6 +405,39 @@ export default function PortalDocuments() {
           )}
         </DialogContent>
       </Dialog>
+      {/* Document Viewer Dialog */}
+      <Dialog open={viewerOpen} onOpenChange={(open) => { if (!open) { setViewerOpen(false); setViewerUrl(null); } }}>
+        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Visualizar Documento
+              </span>
+              {viewerUrl && (
+                <a href={viewerUrl} download target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm">
+                    <Download className="w-3 h-3 mr-1" /> Baixar
+                  </Button>
+                </a>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 px-4 pb-4">
+            {viewerUrl ? (
+              <iframe
+                src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerUrl)}`}
+                className="w-full h-full rounded-lg border"
+                title="Visualização do documento"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin" />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </PortalLayout>
   );
 }
