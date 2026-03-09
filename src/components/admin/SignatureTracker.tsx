@@ -11,7 +11,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ClipboardCheck, Loader2, Eye, ShieldCheck } from 'lucide-react';
+import { ClipboardCheck, Loader2, Eye, ShieldCheck, Camera } from 'lucide-react';
+
+function SelfieEvidence({ selfieUrl }: { selfieUrl: string }) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.storage.from('selfies_assinatura').createSignedUrl(selfieUrl, 300).then(({ data }) => {
+      if (data?.signedUrl) setImgSrc(data.signedUrl);
+    });
+  }, [selfieUrl]);
+
+  return (
+    <div className="border-b pb-3">
+      <p className="text-muted-foreground mb-2 flex items-center gap-1">
+        <Camera className="w-3 h-3" /> Foto no momento da assinatura:
+      </p>
+      {imgSrc ? (
+        <img src={imgSrc} alt="Selfie de assinatura" className="w-full max-h-48 object-cover rounded-lg" />
+      ) : (
+        <div className="h-32 bg-muted rounded-lg flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   companyId: string | null;
