@@ -260,6 +260,11 @@ export function SignatureTracker({ companyId }: Props) {
           </DialogHeader>
           {detailRow && (
             <div className="space-y-3 text-sm">
+              {/* Selfie evidence */}
+              {detailRow.selfieUrl && (
+                <SelfieEvidence selfieUrl={detailRow.selfieUrl} />
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="text-muted-foreground">Documento:</span></div>
                 <div className="font-medium">{detailRow.documentTitle}</div>
