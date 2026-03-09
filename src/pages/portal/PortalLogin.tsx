@@ -172,6 +172,13 @@ export default function PortalLogin() {
                   {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   Entrar
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="w-full text-sm text-muted-foreground hover:text-primary transition-colors mt-2"
+                >
+                  Esqueci minha senha
+                </button>
               </form>
             </TabsContent>
 
