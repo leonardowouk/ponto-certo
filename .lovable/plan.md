@@ -1,61 +1,79 @@
 
 
-# Plano: Foto com Timestamp + Código de Verificação por E-mail na Assinatura
+## Módulo de Fechamento Mensal
 
-## Análise
+### Visão Geral
+Criar um módulo completo de fechamento mensal com 3 etapas: (1) tela de conferência/revisão por colaborador, (2) consolidação e fechamento, (3) geração de espelho para assinatura (PDF-like printable).
 
-A ideia da foto com marcação de data/hora é excelente para reforçar a prova de identidade. Sobre o código por e-mail, é uma boa camada extra, mas precisa considerar:
+### Database
 
-- **Prós**: Dupla verificação (algo que sabe + algo que possui), padrão MFA
-- **Contras**: Depende de o colaborador ter e-mail cadastrado e acessível no momento; adiciona atrito ao fluxo; nem todos os colaboradores podem ter e-mail
+Nova tabela `monthly_closings`:
+- `id` UUID PK
+- `company_id` UUID NOT NULL
+- `employee_id` UUID NOT NULL
+- `ref_month` DATE NOT NULL (primeiro dia do mês)
+- `total_worked_minutes` INT
+- `total_expected_minutes` INT
+- `total_balance_minutes` INT
+- `total_break_minutes` INT
+- `days_worked` INT
+- `days_absent` INT
+- `days_pending` INT
+- `status` ENUM (`pendente`, `conferido`, `fechado`) default `pendente`
+- `closed_by` UUID (user que fechou)
+- `closed_at` TIMESTAMPTZ
+- `reviewed_by` UUID
+- `reviewed_at` TIMESTAMPTZ
+- `notes` TEXT
+- `created_at` TIMESTAMPTZ default now()
+- UNIQUE(employee_id, ref_month)
 
-**Recomendação**: Implementar a foto obrigatória (forte valor probatório) e o código por e-mail como opcional (caso o colaborador tenha e-mail cadastrado). Se não tiver e-mail, segue só com PIN + foto.
+Enum: `closing_status` = pendente, conferido, fechado
 
-## Mudanças
+RLS: admin/RH com filtro por company via employee join.
 
-### 1. Captura de Selfie no Momento da Assinatura
+### Frontend
 
-Reutilizar o componente de câmera já existente no projeto (`SelfieCapture`). Ao assinar:
-- Abrir a câmera no dialog de assinatura
-- Capturar a foto e sobrepor um carimbo com data/hora/nome
-- Enviar a foto para o storage (bucket `selfies_ponto` ou novo `selfies_assinatura`)
-- Gravar a URL da selfie no `document_signatures` e no `signature_audit_log`
+**1. Nova página `src/pages/admin/MonthlyClosing.tsx`**
+- Rota: `/admin/closing`
+- Menu item no sidebar: "Fechamento Mensal" com ícone `FileCheck`
 
-### 2. Código de Verificação por E-mail (OTP)
+**2. Fluxo da página (3 estados):**
 
-- Criar Edge Function `send-signature-otp` que gera código de 6 dígitos, salva hash + expiração numa tabela `signature_otp`, e envia por e-mail via Lovable AI
-- No fluxo de assinatura: se o colaborador tem e-mail, adicionar etapa de "enviar código" e campo para digitar o OTP
-- A Edge Function `sign-document` valida o OTP além do PIN
+**Estado 1 - Lista de conferência:**
+- Seletor de mês (reutiliza pattern do Timesheet)
+- Tabela com todos colaboradores da empresa e resumo mensal:
+  - Nome, Dias trabalhados, Horas trabalhadas, Horas esperadas, Saldo, Dias pendentes/revisão, Status do fechamento
+- Badge indicando status: `pendente` (amarelo), `conferido` (azul), `fechado` (verde)
+- Botão "Conferir" em cada linha para abrir a revisão detalhada
+- Botão "Fechar Mês" (só habilita quando todos estão `conferido`)
 
-### 3. Migração de Banco
+**Estado 2 - Tela de conferência individual (modal ou drawer):**
+- Cabeçalho: Nome do colaborador, mês de referência
+- Tabela dia-a-dia com todas as batidas do mês (reutiliza dados de `timesheets_daily`)
+- Totais consolidados ao final
+- Botão "Marcar como Conferido" → atualiza status para `conferido`
+- Botão "Voltar à lista"
 
-- Adicionar coluna `selfie_url` em `document_signatures` e `signature_audit_log`
-- Criar tabela `signature_otp` (employee_id, code_hash, expires_at, used, signature_id)
+**Estado 3 - Espelho para assinatura (print view):**
+- Botão "Gerar Espelho" por colaborador (após fechado)
+- Abre uma view printable (nova janela ou dialog full-screen) com:
+  - Cabeçalho: empresa, colaborador, mês
+  - Tabela de todos os dias do mês com batidas, trabalhado, esperado, saldo
+  - Totais no rodapé
+  - Linhas de assinatura: "Colaborador: ___" e "Responsável: ___"
+  - Botão "Imprimir" (window.print)
 
-### 4. Atualizar UI (PortalDocuments.tsx)
+**3. Lógica de consolidação:**
+- Ao entrar na página, calcula o resumo mensal de cada colaborador a partir de `timesheets_daily`
+- Upsert no `monthly_closings` com os totais calculados
+- "Fechar Mês" marca todos como `fechado` e registra `closed_by` e `closed_at`
 
-Novo fluxo em etapas no dialog:
-1. Visualizar documento + aceitar termo
-2. Capturar selfie (câmera com overlay de data/hora)
-3. Enviar código por e-mail (se disponível) e validar
-4. Digitar PIN e confirmar
-
-### 5. Atualizar Edge Function `sign-document`
-
-- Receber `selfie_url` e `otp_code` opcionais
-- Validar OTP se fornecido
-- Gravar selfie no audit log
-
-### 6. Atualizar DocumentSignatureModal (admin)
-
-- Mesma lógica: captura de selfie do colaborador presente + OTP opcional
-
-## Arquivos Afetados
-
-- **Migração SQL**: novas colunas + tabela `signature_otp`
-- **`supabase/functions/send-signature-otp/index.ts`**: nova Edge Function
-- **`supabase/functions/sign-document/index.ts`**: validar OTP + selfie
-- **`src/pages/portal/PortalDocuments.tsx`**: fluxo com selfie + OTP
-- **`src/components/admin/DocumentSignatureModal.tsx`**: selfie + OTP
-- **`src/components/kiosk/SelfieCapture.tsx`**: reutilizar/adaptar para assinatura
+### Arquivos a criar/editar:
+1. **Migração SQL**: criar enum `closing_status` e tabela `monthly_closings` com RLS
+2. **`src/pages/admin/MonthlyClosing.tsx`**: página principal com lista + conferência + espelho
+3. **`src/components/admin/EmployeeReviewModal.tsx`**: modal de conferência individual
+4. **`src/components/admin/TimesheetPrintView.tsx`**: componente de espelho para impressão
+5. **`src/App.tsx`**: adicionar rota `/admin/closing`
+6. **`src/components/admin/AdminLayout.tsx`**: adicionar item de menu "Fechamento"
 

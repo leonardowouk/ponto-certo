@@ -11,7 +11,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ClipboardCheck, Loader2, Eye, ShieldCheck } from 'lucide-react';
+import { ClipboardCheck, Loader2, Eye, ShieldCheck, Camera } from 'lucide-react';
+
+function SelfieEvidence({ selfieUrl }: { selfieUrl: string }) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.storage.from('selfies_assinatura').createSignedUrl(selfieUrl, 300).then(({ data }) => {
+      if (data?.signedUrl) setImgSrc(data.signedUrl);
+    });
+  }, [selfieUrl]);
+
+  return (
+    <div className="border-b pb-3">
+      <p className="text-muted-foreground mb-2 flex items-center gap-1">
+        <Camera className="w-3 h-3" /> Foto no momento da assinatura:
+      </p>
+      {imgSrc ? (
+        <img src={imgSrc} alt="Selfie de assinatura" className="w-full max-h-48 object-cover rounded-lg" />
+      ) : (
+        <div className="h-32 bg-muted rounded-lg flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   companyId: string | null;
@@ -43,6 +67,7 @@ interface SignatureRow {
   documentType: string;
   refMonth: string | null;
   employeeName: string;
+  employeeId: string;
   status: string;
   signedAt: string | null;
   signedVia: string | null;
@@ -51,6 +76,7 @@ interface SignatureRow {
   userAgent: string | null;
   documentHash: string | null;
   acceptanceText: string | null;
+  selfieUrl: string | null;
 }
 
 export function SignatureTracker({ companyId }: Props) {
@@ -113,6 +139,7 @@ export function SignatureTracker({ companyId }: Props) {
         documentType: doc?.document_type || '',
         refMonth: doc?.ref_month || null,
         employeeName: s.employees?.nome || '',
+        employeeId: s.employee_id,
         status: s.status,
         signedAt: s.signed_at,
         signedVia: s.signed_via,
@@ -121,6 +148,7 @@ export function SignatureTracker({ companyId }: Props) {
         userAgent: s.user_agent,
         documentHash: s.document_hash,
         acceptanceText: s.acceptance_text,
+        selfieUrl: s.selfie_url || null,
       };
     });
 
@@ -256,6 +284,11 @@ export function SignatureTracker({ companyId }: Props) {
           </DialogHeader>
           {detailRow && (
             <div className="space-y-3 text-sm">
+              {/* Selfie evidence */}
+              {detailRow.selfieUrl && (
+                <SelfieEvidence selfieUrl={detailRow.selfieUrl} />
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="text-muted-foreground">Documento:</span></div>
                 <div className="font-medium">{detailRow.documentTitle}</div>
