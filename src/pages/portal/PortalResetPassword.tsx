@@ -86,8 +86,8 @@ export default function PortalResetPassword() {
       <div className="min-h-screen gradient-primary flex items-center justify-center p-4">
         <Card className="w-full max-w-md card-elevated-lg">
           <CardHeader className="text-center">
-            <div className="w-16 h-16 rounded-2xl bg-green-100 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-primary" />
             </div>
             <CardTitle className="text-2xl">Senha redefinida!</CardTitle>
             <CardDescription>Você será redirecionado para o login em instantes...</CardDescription>
