@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink, Camera } from 'lucide-react';
+import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink, Camera, Download } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -112,21 +112,21 @@ export default function PortalDocuments() {
     setLoading(false);
   };
 
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerLoading, setViewerLoading] = useState(false);
+
   const handleView = async (fileUrl: string) => {
-    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 300);
+    setViewerLoading(true);
+    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 3600);
     if (error || !data?.signedUrl) {
       toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível gerar o link do arquivo.', variant: 'destructive' });
+      setViewerLoading(false);
       return;
     }
-    const newWindow = window.open(data.signedUrl, '_blank');
-    if (!newWindow) {
-      // Popup blocked - fallback to link
-      const a = document.createElement('a');
-      a.href = data.signedUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.click();
-    }
+    setViewerUrl(data.signedUrl);
+    setViewerOpen(true);
+    setViewerLoading(false);
     if (signingDoc) setDocViewed(true);
   };
 
@@ -403,6 +403,39 @@ export default function PortalDocuments() {
               </Button>
             </DialogFooter>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* Document Viewer Dialog */}
+      <Dialog open={viewerOpen} onOpenChange={(open) => { if (!open) { setViewerOpen(false); setViewerUrl(null); } }}>
+        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Visualizar Documento
+              </span>
+              {viewerUrl && (
+                <a href={viewerUrl} download target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm">
+                    <Download className="w-3 h-3 mr-1" /> Baixar
+                  </Button>
+                </a>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 px-4 pb-4">
+            {viewerUrl ? (
+              <iframe
+                src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerUrl)}`}
+                className="w-full h-full rounded-lg border"
+                title="Visualização do documento"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin" />
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </PortalLayout>
