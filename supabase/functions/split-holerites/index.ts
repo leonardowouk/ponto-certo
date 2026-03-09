@@ -47,7 +47,7 @@ function matchEmployee(extractedName: string, employees: { id: string; nome: str
 
 async function saveSinglePage(
   supabase: any,
-  pdfDoc: any,
+  originalPdfBytes: Uint8Array,
   pageIndex: number,
   employee: { id: string; nome: string },
   companyId: string,
@@ -56,10 +56,14 @@ async function saveSinglePage(
   requiresSignature: boolean,
   userId: string,
 ) {
-  const singlePageDoc = await PDFDocument.create();
-  const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageIndex]);
-  singlePageDoc.addPage(copiedPage);
-  const singlePageBytes = await singlePageDoc.save();
+  // Load a fresh copy from raw bytes and remove unwanted pages
+  // This preserves encrypted content instead of copying to a new doc (which results in blank pages)
+  const freshDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
+  const totalPages = freshDoc.getPageCount();
+  for (let i = totalPages - 1; i >= 0; i--) {
+    if (i !== pageIndex) freshDoc.removePage(i);
+  }
+  const singlePageBytes = await freshDoc.save();
 
   const storagePath = `${companyId}/${employee.id}/holerite_${refMonth}.pdf`;
   const { error: uploadError } = await supabase.storage
@@ -140,7 +144,7 @@ serve(async (req) => {
       const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
 
       const docId = await saveSinglePage(
-        supabase, pdfDoc, page - 1,
+        supabase, pdfBytes, page - 1,
         { id: employee_id, nome: employee_name || '' },
         company_id, ref_month, docTitle || 'Holerite',
         requires_signature !== false, user.id,
@@ -273,7 +277,7 @@ IMPORTANTE: Retorne SOMENTE o JSON, sem markdown, sem explicação, sem \`\`\`.`
       }
 
       try {
-        const docId = await saveSinglePage(supabase, pdfDoc, i, matched, companyId, refMonth, title, requiresSignature, user.id);
+        const docId = await saveSinglePage(supabase, pdfBytes, i, matched, companyId, refMonth, title, requiresSignature, user.id);
         results.push({ page: pageNum, extracted_name: extractedName, matched_employee: matched, status: 'matched', document_id: docId });
       } catch (pageError) {
         console.error(`[split-holerites] Error page ${pageNum}:`, pageError);
