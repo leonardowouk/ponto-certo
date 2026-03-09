@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink, Camera, Mail } from 'lucide-react';
+import { FileText, Eye, CheckCircle2, AlertCircle, Loader2, ShieldCheck, ExternalLink, Camera } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -38,7 +38,7 @@ const typeLabels: Record<string, string> = {
   outro: 'Outro',
 };
 
-type SignStep = 'review' | 'selfie' | 'otp' | 'pin';
+type SignStep = 'review' | 'selfie' | 'pin';
 
 export default function PortalDocuments() {
   const { toast } = useToast();
@@ -48,7 +48,6 @@ export default function PortalDocuments() {
   const [signing, setSigning] = useState(false);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState('');
-  const [employeeEmail, setEmployeeEmail] = useState<string | null>(null);
 
   // Signing flow state
   const [step, setStep] = useState<SignStep>('review');
@@ -59,12 +58,6 @@ export default function PortalDocuments() {
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [uploadingSelfie, setUploadingSelfie] = useState(false);
 
-  // OTP state
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpSending, setOtpSending] = useState(false);
-  const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
-
   const resetSigningState = () => {
     setSigningDoc(null);
     setStep('review');
@@ -73,8 +66,6 @@ export default function PortalDocuments() {
     setDocViewed(false);
     setSelfieData(null);
     setSelfieUrl(null);
-    setOtpCode('');
-    setOtpSent(false);
   };
 
   useEffect(() => { loadDocs(); }, []);
@@ -85,14 +76,13 @@ export default function PortalDocuments() {
 
     const { data: emp } = await supabase
       .from('employees')
-      .select('id, nome, email')
+      .select('id, nome')
       .eq('auth_user_id', user.id)
       .single();
 
     if (!emp) return;
     setEmployeeId(emp.id);
     setEmployeeName(emp.nome);
-    setEmployeeEmail(emp.email || null);
 
     const { data: documents } = await supabase
       .from('employee_documents')
@@ -139,7 +129,6 @@ export default function PortalDocuments() {
     setUploadingSelfie(true);
 
     try {
-      // Convert base64 to blob
       const res = await fetch(imageData);
       const blob = await res.blob();
       const fileName = `${employeeId}/${signingDoc.id}_${Date.now()}.jpg`;
@@ -150,36 +139,12 @@ export default function PortalDocuments() {
 
       if (error) throw error;
       setSelfieUrl(fileName);
-
-      // Move to next step
-      if (employeeEmail) {
-        setStep('otp');
-      } else {
-        setStep('pin');
-      }
+      setStep('pin');
     } catch (err: any) {
       toast({ title: 'Erro ao salvar foto', description: err.message, variant: 'destructive' });
     } finally {
       setUploadingSelfie(false);
     }
-  };
-
-  const handleSendOtp = async () => {
-    if (!signingDoc?.signature_id || !employeeId) return;
-    setOtpSending(true);
-
-    const { data, error } = await supabase.functions.invoke('send-signature-otp', {
-      body: { employee_id: employeeId, signature_id: signingDoc.signature_id },
-    });
-
-    if (error || data?.error) {
-      toast({ title: 'Erro ao enviar código', description: data?.error || error?.message, variant: 'destructive' });
-    } else {
-      setOtpSent(true);
-      setOtpMaskedEmail(data.email_masked || '');
-      toast({ title: 'Código enviado!', description: `Verifique seu e-mail (${data.email_masked})` });
-    }
-    setOtpSending(false);
   };
 
   const handleSign = async () => {
@@ -193,7 +158,6 @@ export default function PortalDocuments() {
         acceptance_text: getAcceptanceText(signingDoc.title),
         signed_via: 'portal',
         selfie_url: selfieUrl || undefined,
-        otp_code: otpCode || undefined,
       },
     });
 
@@ -209,8 +173,8 @@ export default function PortalDocuments() {
 
   const pendingDocs = docs.filter(d => d.requires_signature && d.signature_status === 'pendente');
 
-  const stepLabels: Record<SignStep, string> = { review: 'Revisão', selfie: 'Foto', otp: 'Verificação', pin: 'PIN' };
-  const steps: SignStep[] = employeeEmail ? ['review', 'selfie', 'otp', 'pin'] : ['review', 'selfie', 'pin'];
+  const stepLabels: Record<SignStep, string> = { review: 'Revisão', selfie: 'Foto', pin: 'PIN' };
+  const steps: SignStep[] = ['review', 'selfie', 'pin'];
 
   return (
     <PortalLayout currentPage="documents">
@@ -395,54 +359,7 @@ export default function PortalDocuments() {
               </>
             )}
 
-            {/* Step 3: OTP (optional, only if email) */}
-            {step === 'otp' && (
-              <>
-                <div className="text-center space-y-2">
-                  <Mail className="w-10 h-10 text-primary mx-auto" />
-                  <p className="text-sm text-muted-foreground">
-                    Enviaremos um código de verificação para o seu e-mail cadastrado para confirmar sua identidade.
-                  </p>
-                </div>
-
-                {!otpSent ? (
-                  <Button className="w-full" onClick={handleSendOtp} disabled={otpSending}>
-                    {otpSending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
-                    Enviar Código por E-mail
-                  </Button>
-                ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-center text-green-600">
-                      Código enviado para <strong>{otpMaskedEmail}</strong>
-                    </p>
-                    <div className="space-y-1">
-                      <Label>Código de 6 dígitos</Label>
-                      <Input
-                        maxLength={6}
-                        value={otpCode}
-                        onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                        placeholder="000000"
-                        className="text-center text-lg tracking-widest"
-                        autoFocus
-                      />
-                    </div>
-                    <Button className="w-full" onClick={() => setStep('pin')} disabled={otpCode.length !== 6}>
-                      Prosseguir
-                    </Button>
-                    <Button variant="ghost" size="sm" className="w-full" onClick={handleSendOtp} disabled={otpSending}>
-                      Reenviar código
-                    </Button>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setStep('selfie')}>Voltar</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setStep('pin')}>Pular verificação</Button>
-                </div>
-              </>
-            )}
-
-            {/* Step 4: PIN */}
+            {/* Step 3: PIN */}
             {step === 'pin' && (
               <>
                 {selfieData && (
@@ -469,7 +386,7 @@ export default function PortalDocuments() {
 
           {step === 'pin' && (
             <DialogFooter>
-              <Button variant="outline" onClick={() => setStep(employeeEmail ? 'otp' : 'selfie')}>Voltar</Button>
+              <Button variant="outline" onClick={() => setStep('selfie')}>Voltar</Button>
               <Button onClick={handleSign} disabled={signing || !pin || pin.length < 4 || !accepted}>
                 {signing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
                 Confirmar Assinatura

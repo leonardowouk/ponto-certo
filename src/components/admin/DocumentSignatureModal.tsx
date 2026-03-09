@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ShieldCheck, FileText, ExternalLink, CheckCircle2, Camera, Mail } from 'lucide-react';
+import { Loader2, ShieldCheck, FileText, ExternalLink, CheckCircle2, Camera } from 'lucide-react';
 import { SignatureSelfieCapture } from '@/components/signature/SignatureSelfieCapture';
 
 interface Props {
@@ -21,9 +21,9 @@ interface Props {
   signatureId?: string;
 }
 
-type Step = 'view' | 'selfie' | 'otp' | 'confirm';
+type Step = 'view' | 'selfie' | 'confirm';
 
-export function DocumentSignatureModal({ open, onClose, documentId, employeeId, employeeName, employeeEmail, documentTitle, fileUrl, signatureId }: Props) {
+export function DocumentSignatureModal({ open, onClose, documentId, employeeId, employeeName, documentTitle, fileUrl, signatureId }: Props) {
   const { toast } = useToast();
   const [pin, setPin] = useState('');
   const [notes, setNotes] = useState('');
@@ -34,12 +34,6 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
   const [selfieData, setSelfieData] = useState<string | null>(null);
   const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
   const [uploadingSelfie, setUploadingSelfie] = useState(false);
-
-  // OTP
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpSending, setOtpSending] = useState(false);
-  const [otpMaskedEmail, setOtpMaskedEmail] = useState('');
 
   const handleViewDocument = async () => {
     const { data } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 300);
@@ -61,45 +55,12 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
       const { error } = await supabase.storage.from('selfies_assinatura').upload(fileName, blob, { contentType: 'image/jpeg' });
       if (error) throw error;
       setSelfieUrl(fileName);
-
-      if (employeeEmail) {
-        setStep('otp');
-      } else {
-        setStep('confirm');
-      }
+      setStep('confirm');
     } catch (err: any) {
       toast({ title: 'Erro ao salvar foto', description: err.message, variant: 'destructive' });
     } finally {
       setUploadingSelfie(false);
     }
-  };
-
-  const handleSendOtp = async () => {
-    let sigId = signatureId;
-    if (!sigId) {
-      const { data: sigData } = await supabase
-        .from('document_signatures')
-        .select('id')
-        .eq('document_id', documentId)
-        .eq('employee_id', employeeId)
-        .single();
-      sigId = sigData?.id;
-    }
-    if (!sigId) return;
-
-    setOtpSending(true);
-    const { data, error } = await supabase.functions.invoke('send-signature-otp', {
-      body: { employee_id: employeeId, signature_id: sigId },
-    });
-
-    if (error || data?.error) {
-      toast({ title: 'Erro', description: data?.error || error?.message, variant: 'destructive' });
-    } else {
-      setOtpSent(true);
-      setOtpMaskedEmail(data.email_masked || '');
-      toast({ title: 'Código enviado!', description: `Verifique o e-mail (${data.email_masked})` });
-    }
-    setOtpSending(false);
   };
 
   const handleSign = async () => {
@@ -133,7 +94,6 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
         acceptance_text: getAcceptanceText() + (notes.trim() ? ` Obs: ${notes.trim()}` : ''),
         signed_via: 'admin',
         selfie_url: selfieUrl || undefined,
-        otp_code: otpCode || undefined,
       },
     });
 
@@ -153,13 +113,11 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
     setNotes('');
     setSelfieData(null);
     setSelfieUrl(null);
-    setOtpCode('');
-    setOtpSent(false);
     onClose();
   };
 
-  const steps: Step[] = employeeEmail ? ['view', 'selfie', 'otp', 'confirm'] : ['view', 'selfie', 'confirm'];
-  const stepLabels: Record<Step, string> = { view: 'Revisão', selfie: 'Foto', otp: 'Código', confirm: 'PIN' };
+  const steps: Step[] = ['view', 'selfie', 'confirm'];
+  const stepLabels: Record<Step, string> = { view: 'Revisão', selfie: 'Foto', confirm: 'PIN' };
 
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
@@ -230,37 +188,6 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
             </>
           )}
 
-          {/* Step: OTP */}
-          {step === 'otp' && (
-            <>
-              <div className="text-center space-y-2">
-                <Mail className="w-10 h-10 text-primary mx-auto" />
-                <p className="text-sm text-muted-foreground">
-                  Envie um código de verificação para o e-mail do colaborador.
-                </p>
-              </div>
-
-              {!otpSent ? (
-                <Button className="w-full" onClick={handleSendOtp} disabled={otpSending}>
-                  {otpSending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
-                  Enviar Código
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-center text-green-600">Código enviado para <strong>{otpMaskedEmail}</strong></p>
-                  <Input maxLength={6} value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))} placeholder="000000" className="text-center text-lg tracking-widest" autoFocus />
-                  <Button className="w-full" onClick={() => setStep('confirm')} disabled={otpCode.length !== 6}>Prosseguir</Button>
-                  <Button variant="ghost" size="sm" className="w-full" onClick={handleSendOtp} disabled={otpSending}>Reenviar</Button>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setStep('selfie')}>Voltar</Button>
-                <Button variant="ghost" size="sm" onClick={() => setStep('confirm')}>Pular</Button>
-              </div>
-            </>
-          )}
-
           {/* Step: Confirm */}
           {step === 'confirm' && (
             <>
@@ -292,7 +219,7 @@ export function DocumentSignatureModal({ open, onClose, documentId, employeeId, 
 
         {step === 'confirm' && (
           <DialogFooter>
-            <Button variant="outline" onClick={() => setStep(employeeEmail ? 'otp' : 'selfie')}>Voltar</Button>
+            <Button variant="outline" onClick={() => setStep('selfie')}>Voltar</Button>
             <Button onClick={handleSign} disabled={signing || !pin || pin.length < 4}>
               {signing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <ShieldCheck className="w-4 h-4 mr-2" />}
               Confirmar Assinatura
