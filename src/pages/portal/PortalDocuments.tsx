@@ -118,16 +118,25 @@ export default function PortalDocuments() {
 
   const handleView = async (fileUrl: string) => {
     setViewerLoading(true);
-    const { data, error } = await supabase.storage.from('documentos').createSignedUrl(fileUrl, 3600);
-    if (error || !data?.signedUrl) {
-      toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível gerar o link do arquivo.', variant: 'destructive' });
-      setViewerLoading(false);
-      return;
-    }
-    setViewerUrl(data.signedUrl);
     setViewerOpen(true);
-    setViewerLoading(false);
-    if (signingDoc) setDocViewed(true);
+
+    try {
+      const { data, error } = await supabase.storage.from('documentos').download(fileUrl);
+      if (error || !data) {
+        toast({ title: 'Erro ao abrir documento', description: error?.message || 'Não foi possível carregar o arquivo.', variant: 'destructive' });
+        setViewerOpen(false);
+        setViewerLoading(false);
+        return;
+      }
+      const blobUrl = URL.createObjectURL(data);
+      setViewerUrl(blobUrl);
+      if (signingDoc) setDocViewed(true);
+    } catch (err: any) {
+      toast({ title: 'Erro ao abrir documento', description: err.message, variant: 'destructive' });
+      setViewerOpen(false);
+    } finally {
+      setViewerLoading(false);
+    }
   };
 
   const getAcceptanceText = (title: string) =>
