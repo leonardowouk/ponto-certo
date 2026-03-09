@@ -47,7 +47,7 @@ function matchEmployee(extractedName: string, employees: { id: string; nome: str
 
 async function saveSinglePage(
   supabase: any,
-  pdfDoc: any,
+  originalPdfBytes: Uint8Array,
   pageIndex: number,
   employee: { id: string; nome: string },
   companyId: string,
@@ -56,10 +56,14 @@ async function saveSinglePage(
   requiresSignature: boolean,
   userId: string,
 ) {
-  const singlePageDoc = await PDFDocument.create();
-  const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageIndex]);
-  singlePageDoc.addPage(copiedPage);
-  const singlePageBytes = await singlePageDoc.save();
+  // Load a fresh copy from raw bytes and remove unwanted pages
+  // This preserves encrypted content instead of copying to a new doc (which results in blank pages)
+  const freshDoc = await PDFDocument.load(originalPdfBytes, { ignoreEncryption: true });
+  const totalPages = freshDoc.getPageCount();
+  for (let i = totalPages - 1; i >= 0; i--) {
+    if (i !== pageIndex) freshDoc.removePage(i);
+  }
+  const singlePageBytes = await freshDoc.save();
 
   const storagePath = `${companyId}/${employee.id}/holerite_${refMonth}.pdf`;
   const { error: uploadError } = await supabase.storage
