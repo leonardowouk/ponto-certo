@@ -18,12 +18,27 @@ export default function PortalLogin() {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [forgotMethod, setForgotMethod] = useState<'email' | 'cpfpin'>('email');
   const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotCpf, setForgotCpf] = useState('');
+  const [forgotPin, setForgotPin] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
+  const resetForgotState = () => {
+    setShowForgot(false);
+    setForgotMethod('email');
+    setForgotEmail('');
+    setForgotCpf('');
+    setForgotPin('');
+    setNewPassword('');
+    setConfirmNewPassword('');
+  };
+
+  const handleForgotEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail) {
       toast({ title: 'Informe seu email', variant: 'destructive' });
@@ -39,7 +54,56 @@ export default function PortalLogin() {
         return;
       }
       toast({ title: 'Email enviado!', description: 'Verifique sua caixa de entrada para redefinir a senha.' });
-      setShowForgot(false);
+      resetForgotState();
+    } catch {
+      toast({ title: 'Erro de conexão', variant: 'destructive' });
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleForgotCpfPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotCpf || !forgotPin || !newPassword) {
+      toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({ title: 'Senha deve ter no mínimo 6 caracteres', variant: 'destructive' });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast({ title: 'As senhas não coincidem', variant: 'destructive' });
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const cpfClean = forgotCpf.replace(/\D/g, '');
+      const cpfHash = await hashCPF(cpfClean);
+
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/reset-password-cpf-pin`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+            'apikey': anonKey,
+          },
+          body: JSON.stringify({ cpf_hash: cpfHash, pin: forgotPin, new_password: newPassword }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: 'Erro', description: result.error, variant: 'destructive' });
+        return;
+      }
+
+      toast({ title: 'Senha redefinida!', description: `${result.employee_name}, faça login com sua nova senha.` });
+      resetForgotState();
     } catch {
       toast({ title: 'Erro de conexão', variant: 'destructive' });
     } finally {
