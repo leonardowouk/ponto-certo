@@ -93,6 +93,7 @@ export type Database = {
           ip_address: string | null
           notes: string | null
           pin_verified: boolean | null
+          selfie_url: string | null
           signed_at: string | null
           signed_via: string | null
           status: Database["public"]["Enums"]["signature_status"]
@@ -108,6 +109,7 @@ export type Database = {
           ip_address?: string | null
           notes?: string | null
           pin_verified?: boolean | null
+          selfie_url?: string | null
           signed_at?: string | null
           signed_via?: string | null
           status?: Database["public"]["Enums"]["signature_status"]
@@ -123,6 +125,7 @@ export type Database = {
           ip_address?: string | null
           notes?: string | null
           pin_verified?: boolean | null
+          selfie_url?: string | null
           signed_at?: string | null
           signed_via?: string | null
           status?: Database["public"]["Enums"]["signature_status"]
@@ -671,6 +674,7 @@ export type Database = {
           id: string
           ip_address: string | null
           pin_verified: boolean | null
+          selfie_url: string | null
           signature_id: string
           signed_via: string | null
           user_agent: string | null
@@ -686,6 +690,7 @@ export type Database = {
           id?: string
           ip_address?: string | null
           pin_verified?: boolean | null
+          selfie_url?: string | null
           signature_id: string
           signed_via?: string | null
           user_agent?: string | null
@@ -701,6 +706,7 @@ export type Database = {
           id?: string
           ip_address?: string | null
           pin_verified?: boolean | null
+          selfie_url?: string | null
           signature_id?: string
           signed_via?: string | null
           user_agent?: string | null
@@ -722,6 +728,51 @@ export type Database = {
           },
           {
             foreignKeyName: "signature_audit_log_signature_id_fkey"
+            columns: ["signature_id"]
+            isOneToOne: false
+            referencedRelation: "document_signatures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_otp: {
+        Row: {
+          code_hash: string
+          created_at: string
+          employee_id: string
+          expires_at: string
+          id: string
+          signature_id: string
+          used: boolean
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          employee_id: string
+          expires_at: string
+          id?: string
+          signature_id: string
+          used?: boolean
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          employee_id?: string
+          expires_at?: string
+          id?: string
+          signature_id?: string
+          used?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_otp_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signature_otp_signature_id_fkey"
             columns: ["signature_id"]
             isOneToOne: false
             referencedRelation: "document_signatures"

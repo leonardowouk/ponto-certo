@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "2026-03-08.1";
+const VERSION = "2026-03-09.2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +11,11 @@ const corsHeaders = {
 async function sha256Hex(data: Uint8Array): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256HexString(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  return sha256Hex(data);
 }
 
 async function verifyPin(pinHash: string, pin: string): Promise<boolean> {
@@ -47,7 +52,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { signature_id, pin, acceptance_text, signed_via } = body;
+    const { signature_id, pin, acceptance_text, signed_via, selfie_url, otp_code } = body;
 
     if (!signature_id || !pin || !acceptance_text) {
       return new Response(
@@ -100,6 +105,36 @@ serve(async (req) => {
       );
     }
 
+    // Validate OTP if provided
+    if (otp_code) {
+      const otpHash = await sha256HexString(otp_code);
+      const { data: otp } = await supabase
+        .from('signature_otp')
+        .select('id, expires_at, used')
+        .eq('signature_id', signature_id)
+        .eq('employee_id', sig.employee_id)
+        .eq('code_hash', otpHash)
+        .eq('used', false)
+        .single();
+
+      if (!otp) {
+        return new Response(
+          JSON.stringify({ error: 'Código de verificação inválido' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      if (new Date(otp.expires_at) < new Date()) {
+        return new Response(
+          JSON.stringify({ error: 'Código de verificação expirado' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+        );
+      }
+
+      // Mark OTP as used
+      await supabase.from('signature_otp').update({ used: true }).eq('id', otp.id);
+    }
+
     // Get document file for hash
     const { data: doc } = await supabase
       .from('employee_documents')
@@ -138,6 +173,7 @@ serve(async (req) => {
         user_agent: userAgent,
         document_hash: documentHash,
         acceptance_text: acceptance_text,
+        selfie_url: selfie_url || null,
       })
       .eq('id', signature_id);
 
@@ -164,11 +200,11 @@ serve(async (req) => {
         pin_verified: true,
         signed_via: via,
         auth_user_id: authUserId,
+        selfie_url: selfie_url || null,
       });
 
     if (auditErr) {
       console.error('[sign-document] Audit log error:', auditErr);
-      // Don't fail the signature for audit log errors, but log it
     }
 
     return new Response(
