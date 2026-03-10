@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save, Eye, Check } from 'lucide-react';
+import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save, Eye, Check, FileText, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface Props {
@@ -559,7 +559,7 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
 
       {/* Page Preview Modal */}
       <Dialog open={previewOpen} onOpenChange={(open) => { if (!open) handleClosePreview(); }}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+        <DialogContent className="max-w-4xl h-[85vh] sm:h-[85vh] h-[70vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Visualizar Página {previewPage}</DialogTitle>
           </DialogHeader>
@@ -569,11 +569,30 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
               </div>
             ) : previewUrl ? (
-              <iframe
-                src={previewUrl}
-                className="w-full h-full rounded-lg border"
-                title={`Página ${previewPage}`}
-              />
+              <>
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full rounded-lg border hidden sm:block"
+                  title={`Página ${previewPage}`}
+                />
+                <div className="flex sm:hidden flex-col items-center justify-center h-full gap-4 text-center">
+                  <FileText className="w-16 h-16 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    A visualização de PDF não é suportada no navegador mobile.
+                  </p>
+                  <Button onClick={() => {
+                    if (previewUrl) {
+                      const a = document.createElement('a');
+                      a.href = previewUrl;
+                      a.download = `pagina_${previewPage}.pdf`;
+                      a.click();
+                    }
+                  }}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar PDF para visualizar
+                  </Button>
+                </div>
+              </>
             ) : null}
           </div>
         </DialogContent>
