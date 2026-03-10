@@ -137,13 +137,15 @@ export function BulkHoleriteUpload({ companyId, onUploaded }: Props) {
     setPreviewOpen(true);
 
     try {
-      // Download the full original PDF from storage and navigate to the specific page
-      const { data, error } = await supabase.storage.from('documentos').download(summary.temp_storage_path);
-      if (error || !data) throw new Error('Erro ao carregar PDF');
+      const { data, error } = await supabase.functions.invoke('split-holerites', {
+        body: { action: 'preview_page', storage_path: summary.temp_storage_path, page },
+      });
 
-      const url = URL.createObjectURL(data);
-      // Use #page=N to navigate to the specific page in the PDF viewer
-      setPreviewUrl(`${url}#page=${page}`);
+      if (error) throw new Error('Erro ao carregar página');
+
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
     } catch (error: any) {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       setPreviewOpen(false);
