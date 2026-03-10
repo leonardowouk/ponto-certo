@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save, Eye, Check } from 'lucide-react';
+import { FileUp, Loader2, Sparkles, CheckCircle2, AlertCircle, HelpCircle, Save, Eye, Check, FileText, Download } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface Props {
