@@ -317,15 +317,28 @@ export function EmployeeReviewModal({
     const [eh, em] = entrada.split(':').map(Number);
     const [sh, sm] = saida.split(':').map(Number);
     const totalMinutes = (sh * 60 + sm) - (eh * 60 + em);
-    
+
     let breakMinutes = 0;
     if (saidaInt && retornoInt) {
       const [ih, im] = saidaInt.split(':').map(Number);
       const [rh, rm] = retornoInt.split(':').map(Number);
       breakMinutes = (rh * 60 + rm) - (ih * 60 + im);
     }
-    
+
     return { worked: Math.max(0, totalMinutes - breakMinutes), breaks: Math.max(0, breakMinutes) };
+  };
+
+  // Build an ISO timestamp from a work_date (YYYY-MM-DD) + HH:mm using browser local TZ
+  const buildLocalIso = (workDate: string, time: string): string | null => {
+    if (!time) return null;
+    const [y, mo, d] = workDate.split('-').map(Number);
+    const [h, mi] = time.split(':').map(Number);
+    return new Date(y, mo - 1, d, h, mi, 0, 0).toISOString();
+  };
+
+  const timeToMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
   };
 
   const saveEdit = async (day: DayWithPunches) => {
@@ -334,29 +347,109 @@ export function EmployeeReviewModal({
       return;
     }
 
-    if (!editValues.entrada && !editValues.saida) {
-      toast({ title: 'Informe ao menos entrada e saída', variant: 'destructive' });
+    if (!editValues.entrada || !editValues.saida) {
+      toast({ title: 'Informe entrada e saída', description: 'Os horários de entrada e saída são obrigatórios.', variant: 'destructive' });
       return;
     }
 
-    const toIso = (time: string) => {
-      if (!time) return null;
-      return `${day.work_date}T${time}:00`;
-    };
+    const hasIntStart = !!editValues.saidaInt;
+    const hasIntEnd = !!editValues.retornoInt;
+    if (hasIntStart !== hasIntEnd) {
+      toast({ title: 'Intervalo incompleto', description: 'Preencha início E fim do intervalo, ou deixe ambos vazios.', variant: 'destructive' });
+      return;
+    }
+
+    const tEntrada = timeToMinutes(editValues.entrada);
+    const tSaida = timeToMinutes(editValues.saida);
+    if (tSaida <= tEntrada) {
+      toast({ title: 'Horários inválidos', description: 'A saída deve ser depois da entrada.', variant: 'destructive' });
+      return;
+    }
+    if (hasIntStart && hasIntEnd) {
+      const tIntIni = timeToMinutes(editValues.saidaInt);
+      const tIntFim = timeToMinutes(editValues.retornoInt);
+      if (!(tEntrada < tIntIni && tIntIni < tIntFim && tIntFim < tSaida)) {
+        toast({ title: 'Horários do intervalo inválidos', description: 'A ordem deve ser: entrada < início intervalo < fim intervalo < saída.', variant: 'destructive' });
+        return;
+      }
+    }
 
     const newNote = `[Ajuste] ${editValues.justificativa.trim()}`;
 
+    const desired: Array<{ type: 'entrada' | 'intervalo_inicio' | 'intervalo_fim' | 'saida'; time: string }> = [
+      { type: 'entrada', time: editValues.entrada },
+      { type: 'intervalo_inicio', time: editValues.saidaInt },
+      { type: 'intervalo_fim', time: editValues.retornoInt },
+      { type: 'saida', time: editValues.saida },
+    ];
+
+    let hasError = false;
+    for (const item of desired) {
+      const existing = day.punches.find(p => p.punch_type === item.type);
+      const newIso = buildLocalIso(day.work_date, item.time);
+
+      if (item.time && existing) {
+        const { error } = await supabase
+          .from('time_punches')
+          .update({ punched_at: newIso!, status: 'ajustado' as any })
+          .eq('id', existing.id);
+        if (error) { hasError = true; console.error('update punch', error); }
+      } else if (item.time && !existing) {
+        const { error } = await supabase
+          .from('time_punches')
+          .insert({
+            employee_id: employeeId,
+            punch_type: item.type as any,
+            punched_at: newIso!,
+            status: 'ajustado' as any,
+            unidade: 'ajuste-manual',
+            device_id: null as any,
+            selfie_url: null as any,
+          } as any);
+        if (error) { hasError = true; console.error('insert punch', error); }
+      } else if (!item.time && existing) {
+        const { error } = await supabase
+          .from('time_punches')
+          .delete()
+          .eq('id', existing.id);
+        if (error) { hasError = true; console.error('delete punch', error); }
+      }
+    }
+
+    if (hasError) {
+      toast({ title: 'Erro ao ajustar batidas', description: 'Algumas batidas não puderam ser salvas. Veja o console.', variant: 'destructive' });
+      return;
+    }
+
+    // Re-fetch real punches and recalc from source of truth
+    const dayStart = `${day.work_date}T00:00:00`;
+    const dayEnd = `${day.work_date}T23:59:59`;
+    const { data: freshPunches } = await supabase
+      .from('time_punches')
+      .select('punch_type, punched_at')
+      .eq('employee_id', employeeId)
+      .gte('punched_at', dayStart)
+      .lte('punched_at', dayEnd)
+      .order('punched_at', { ascending: true });
+
+    const pByType = new Map<string, string>();
+    (freshPunches || []).forEach(p => pByType.set(p.punch_type, p.punched_at!));
+
+    const fmtHM = (iso: string | undefined) => iso ? format(new Date(iso), 'HH:mm') : '';
+    const realEntrada = fmtHM(pByType.get('entrada'));
+    const realSaida = fmtHM(pByType.get('saida'));
+    const realIntIni = fmtHM(pByType.get('intervalo_inicio'));
+    const realIntFim = fmtHM(pByType.get('intervalo_fim'));
+
+    const { worked, breaks } = calculateMinutesFromTimes(realEntrada, realSaida, realIntIni, realIntFim);
+
     if (day.isMissing) {
-      // Create new timesheet record for missing day with manual times
-      const { worked, breaks } = calculateMinutesFromTimes(editValues.entrada, editValues.saida, editValues.saidaInt, editValues.retornoInt);
-      
-      // Get expected minutes from schedule
       const { data: ws } = await supabase
         .from('work_schedules')
         .select('expected_start, expected_end, break_minutes')
         .eq('employee_id', employeeId)
         .maybeSingle();
-      
+
       let expectedMinutes = 0;
       if (ws?.expected_start && ws?.expected_end) {
         const [sh, sm] = ws.expected_start.split(':').map(Number);
@@ -369,8 +462,8 @@ export function EmployeeReviewModal({
         .insert({
           employee_id: employeeId,
           work_date: day.work_date,
-          first_punch_at: toIso(editValues.entrada),
-          last_punch_at: toIso(editValues.saida),
+          first_punch_at: pByType.get('entrada') || null,
+          last_punch_at: pByType.get('saida') || null,
           worked_minutes: worked,
           break_minutes: breaks,
           expected_minutes: expectedMinutes,
@@ -389,49 +482,25 @@ export function EmployeeReviewModal({
       return;
     }
 
-    // Existing day: update punches
-    const punchUpdates = [
-      { type: 'entrada', time: toIso(editValues.entrada), existingId: day.punches.find(p => p.punch_type === 'entrada')?.id },
-      { type: 'intervalo_inicio', time: toIso(editValues.saidaInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_inicio')?.id },
-      { type: 'intervalo_fim', time: toIso(editValues.retornoInt), existingId: day.punches.find(p => p.punch_type === 'intervalo_fim')?.id },
-      { type: 'saida', time: toIso(editValues.saida), existingId: day.punches.find(p => p.punch_type === 'saida')?.id },
-    ];
-
-    let hasError = false;
-    for (const pu of punchUpdates) {
-      if (pu.existingId && pu.time) {
-        const { error } = await supabase
-          .from('time_punches')
-          .update({ punched_at: pu.time, status: 'ajustado' as any })
-          .eq('id', pu.existingId);
-        if (error) { hasError = true; console.error(error); }
-      }
-    }
-
-    // Recalculate worked minutes if entry/exit provided
-    const { worked, breaks } = calculateMinutesFromTimes(editValues.entrada, editValues.saida, editValues.saidaInt, editValues.retornoInt);
-
+    const expected = day.expected_minutes || 0;
     const existingNotes = day.notes || '';
     const updateData: Record<string, any> = {
       notes: existingNotes ? `${existingNotes} | ${newNote}` : newNote,
       status: 'ajustado' as any,
+      first_punch_at: pByType.get('entrada') || null,
+      last_punch_at: pByType.get('saida') || null,
+      worked_minutes: worked,
+      break_minutes: breaks,
+      balance_minutes: worked - expected,
     };
-
-    if (editValues.entrada) updateData.first_punch_at = toIso(editValues.entrada);
-    if (editValues.saida) updateData.last_punch_at = toIso(editValues.saida);
-    if (editValues.entrada && editValues.saida) {
-      updateData.worked_minutes = worked;
-      updateData.break_minutes = breaks;
-      updateData.balance_minutes = worked - (day.expected_minutes || 0);
-    }
 
     const { error } = await supabase
       .from('timesheets_daily')
       .update(updateData)
       .eq('id', day.id);
 
-    if (error || hasError) {
-      toast({ title: 'Erro ao salvar ajuste', description: error?.message || 'Erro ao atualizar batidas', variant: 'destructive' });
+    if (error) {
+      toast({ title: 'Erro ao salvar ajuste', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Ajuste salvo!' });
       setEditingDay(null);
