@@ -821,34 +821,34 @@ export type Database = {
       time_punches: {
         Row: {
           created_at: string | null
-          device_id: string
+          device_id: string | null
           employee_id: string
           id: string
           punch_type: Database["public"]["Enums"]["punch_type"]
           punched_at: string | null
-          selfie_url: string
+          selfie_url: string | null
           status: Database["public"]["Enums"]["punch_status"] | null
           unidade: string
         }
         Insert: {
           created_at?: string | null
-          device_id: string
+          device_id?: string | null
           employee_id: string
           id?: string
           punch_type: Database["public"]["Enums"]["punch_type"]
           punched_at?: string | null
-          selfie_url: string
+          selfie_url?: string | null
           status?: Database["public"]["Enums"]["punch_status"] | null
           unidade: string
         }
         Update: {
           created_at?: string | null
-          device_id?: string
+          device_id?: string | null
           employee_id?: string
           id?: string
           punch_type?: Database["public"]["Enums"]["punch_type"]
           punched_at?: string | null
-          selfie_url?: string
+          selfie_url?: string | null
           status?: Database["public"]["Enums"]["punch_status"] | null
           unidade?: string
         }
