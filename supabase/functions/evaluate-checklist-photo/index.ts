@@ -114,6 +114,22 @@ Deno.serve(async (req) => {
       })
       .eq('id', resposta_id);
 
+    // Notify Admin/RH via WhatsApp when AI reproves (fire-and-forget)
+    if (status_ia === 'reprovado') {
+      try {
+        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-checklist-reprovacao`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({ resposta_id }),
+        });
+      } catch (e) {
+        console.error('failed to trigger notify-checklist-reprovacao', e);
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, status_ia, confianca: args.confianca, motivo: args.motivo }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
