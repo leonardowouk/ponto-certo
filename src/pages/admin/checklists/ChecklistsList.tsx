@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, Loader2, ListChecks, CalendarClock, ClipboardList, LayoutDashboard } from 'lucide-react';
+import { Plus, Pencil, Loader2, ListChecks, CalendarClock, ClipboardList, LayoutDashboard, AlertCircle } from 'lucide-react';
 
 interface Checklist {
   id: string;
@@ -106,6 +106,9 @@ export default function ChecklistsList() {
           </Button>
           <Button variant="outline" onClick={() => navigate('/admin/checklists/execucoes')}>
             <ClipboardList className="w-4 h-4 mr-2" /> Execuções
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/admin/checklists/revisao')}>
+            <AlertCircle className="w-4 h-4 mr-2" /> Fila de revisão
           </Button>
           <div className="ml-auto">
             <Dialog open={open} onOpenChange={setOpen}>

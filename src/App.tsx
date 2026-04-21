@@ -21,6 +21,7 @@ import ChecklistEditor from "./pages/admin/checklists/ChecklistEditor";
 import ChecklistAgendamentos from "./pages/admin/checklists/ChecklistAgendamentos";
 import ChecklistExecucoes from "./pages/admin/checklists/ChecklistExecucoes";
 import ChecklistDashboard from "./pages/admin/checklists/ChecklistDashboard";
+import ChecklistRevisao from "./pages/admin/checklists/ChecklistRevisao";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalDashboard from "./pages/portal/PortalDashboard";
 import PortalDocuments from "./pages/portal/PortalDocuments";
@@ -50,6 +51,7 @@ const AdminRoutes = () => (
       <Route path="/checklists/dashboard" element={<ChecklistDashboard />} />
       <Route path="/checklists/agendamentos" element={<ChecklistAgendamentos />} />
       <Route path="/checklists/execucoes" element={<ChecklistExecucoes />} />
+      <Route path="/checklists/revisao" element={<ChecklistRevisao />} />
       <Route path="/checklists/:id" element={<ChecklistEditor />} />
     </Routes>
   </CompanyProvider>
