@@ -187,7 +187,7 @@ export default function ChecklistExecucoes() {
                       {r.observacao_gestor && <p className="text-xs"><strong>Obs gestor:</strong> {r.observacao_gestor}</p>}
                       <div className="flex gap-2 pt-1">
                         <Button size="sm" variant="outline" onClick={() => override(r.id, 'aprovado')}>
-                          <CheckCircle2 className="w-4 h-4 mr-1 text-emerald-600" /> Aprovar
+                          <CheckCircle2 className="w-4 h-4 mr-1 text-primary" /> Aprovar
                         </Button>
                         <Button size="sm" variant="outline" onClick={() => {
                           const obs = prompt('Motivo da reprovação:') || undefined;
