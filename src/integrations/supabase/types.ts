@@ -285,6 +285,77 @@ export type Database = {
           },
         ]
       }
+      checklist_whatsapp_sessions: {
+        Row: {
+          company_id: string
+          context: Json
+          created_at: string
+          current_item_id: string | null
+          employee_id: string
+          execucao_id: string | null
+          expires_at: string
+          id: string
+          phone: string
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          context?: Json
+          created_at?: string
+          current_item_id?: string | null
+          employee_id: string
+          execucao_id?: string | null
+          expires_at?: string
+          id?: string
+          phone: string
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          context?: Json
+          created_at?: string
+          current_item_id?: string | null
+          employee_id?: string
+          execucao_id?: string | null
+          expires_at?: string
+          id?: string
+          phone?: string
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_whatsapp_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_whatsapp_sessions_current_item_id_fkey"
+            columns: ["current_item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_whatsapp_sessions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_whatsapp_sessions_execucao_id_fkey"
+            columns: ["execucao_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_execucoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checklists: {
         Row: {
           ativo: boolean
