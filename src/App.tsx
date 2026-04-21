@@ -46,6 +46,11 @@ const AdminRoutes = () => (
       <Route path="/closing" element={<MonthlyClosing />} />
       <Route path="/documents" element={<Documents />} />
       <Route path="/users" element={<Users />} />
+      <Route path="/checklists" element={<ChecklistsList />} />
+      <Route path="/checklists/dashboard" element={<ChecklistDashboard />} />
+      <Route path="/checklists/agendamentos" element={<ChecklistAgendamentos />} />
+      <Route path="/checklists/execucoes" element={<ChecklistExecucoes />} />
+      <Route path="/checklists/:id" element={<ChecklistEditor />} />
     </Routes>
   </CompanyProvider>
 );
