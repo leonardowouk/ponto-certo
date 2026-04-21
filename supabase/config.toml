@@ -5,3 +5,12 @@ verify_jwt = false
 
 [functions.dispatch-checklists]
 verify_jwt = false
+
+[functions.send-checklist-reminders]
+verify_jwt = false
+
+[functions.send-checklist-daily-summary]
+verify_jwt = false
+
+[functions.notify-checklist-reprovacao]
+verify_jwt = false

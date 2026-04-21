@@ -28,6 +28,7 @@ interface Agendamento {
   hora: string;
   weekly_days: WeeklyDays;
   ativo: boolean;
+  lembrete_apos_minutos: number | null;
   checklists?: { nome: string };
   checklist_agendamento_employees: { employee_id: string; employees?: { nome: string } }[];
 }
@@ -43,10 +44,10 @@ export default function ChecklistAgendamentos() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Agendamento | null>(null);
-  const [form, setForm] = useState<{ checklist_id: string; hora: string; weekly_days: WeeklyDays; ativo: boolean; employee_ids: string[] }>({
+  const [form, setForm] = useState<{ checklist_id: string; hora: string; weekly_days: WeeklyDays; ativo: boolean; employee_ids: string[]; lembrete_apos_minutos: string }>({
     checklist_id: '', hora: '08:00',
     weekly_days: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
-    ativo: true, employee_ids: [],
+    ativo: true, employee_ids: [], lembrete_apos_minutos: '',
   });
 
   const load = async () => {
@@ -71,7 +72,7 @@ export default function ChecklistAgendamentos() {
     setForm({
       checklist_id: '', hora: '08:00',
       weekly_days: { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false },
-      ativo: true, employee_ids: [],
+      ativo: true, employee_ids: [], lembrete_apos_minutos: '',
     });
     setOpen(true);
   };
@@ -83,6 +84,7 @@ export default function ChecklistAgendamentos() {
       weekly_days: a.weekly_days,
       ativo: a.ativo,
       employee_ids: a.checklist_agendamento_employees.map(e => e.employee_id),
+      lembrete_apos_minutos: a.lembrete_apos_minutos != null ? String(a.lembrete_apos_minutos) : '',
     });
     setOpen(true);
   };
@@ -92,12 +94,18 @@ export default function ChecklistAgendamentos() {
     if (!form.checklist_id) { toast({ title: 'Selecione um checklist', variant: 'destructive' }); return; }
     setSaving(true);
     let agId = editing?.id;
+    const lembreteMin = form.lembrete_apos_minutos.trim() === '' ? null : parseInt(form.lembrete_apos_minutos, 10);
+    if (lembreteMin !== null && (isNaN(lembreteMin) || lembreteMin < 1)) {
+      toast({ title: 'Lembrete inválido', description: 'Use um número de minutos > 0 ou deixe em branco.', variant: 'destructive' });
+      setSaving(false); return;
+    }
     if (editing) {
       const { error } = await supabase.from('checklist_agendamentos').update({
         checklist_id: form.checklist_id,
         hora: form.hora + ':00',
         weekly_days: form.weekly_days as any,
         ativo: form.ativo,
+        lembrete_apos_minutos: lembreteMin,
       }).eq('id', editing.id);
       if (error) { toast({ title: 'Erro', description: error.message, variant: 'destructive' }); setSaving(false); return; }
     } else {
@@ -107,6 +115,7 @@ export default function ChecklistAgendamentos() {
         hora: form.hora + ':00',
         weekly_days: form.weekly_days as any,
         ativo: form.ativo,
+        lembrete_apos_minutos: lembreteMin,
       }).select().single();
       if (error || !data) { toast({ title: 'Erro', description: error?.message, variant: 'destructive' }); setSaving(false); return; }
       agId = data.id;
@@ -166,6 +175,21 @@ export default function ChecklistAgendamentos() {
                   <Input type="time" value={form.hora} onChange={(e) => setForm({ ...form, hora: e.target.value })} />
                 </div>
                 <div>
+                  <Label>Lembrete via WhatsApp (opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      placeholder="Ex: 60"
+                      value={form.lembrete_apos_minutos}
+                      onChange={(e) => setForm({ ...form, lembrete_apos_minutos: e.target.value })}
+                      className="max-w-32"
+                    />
+                    <span className="text-sm text-muted-foreground">minutos após o horário</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Deixe em branco para desativar lembretes deste agendamento.</p>
+                </div>
+                <div>
                   <Label>Dias da semana</Label>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {DAYS.map(d => (
@@ -217,6 +241,9 @@ export default function ChecklistAgendamentos() {
                       <span className="font-medium">{a.checklists?.nome}</span>
                       <Badge variant="outline">{a.hora.slice(0, 5)}</Badge>
                       <Badge variant={a.ativo ? 'default' : 'secondary'}>{a.ativo ? 'Ativo' : 'Inativo'}</Badge>
+                      {a.lembrete_apos_minutos != null && (
+                        <Badge variant="outline" className="text-xs">⏰ Lembrete +{a.lembrete_apos_minutos}min</Badge>
+                      )}
                       {DAYS.filter(d => a.weekly_days[d.key]).map(d => (
                         <Badge key={d.key} variant="outline" className="text-xs">{d.label}</Badge>
                       ))}
