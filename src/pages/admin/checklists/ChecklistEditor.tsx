@@ -201,6 +201,11 @@ export default function ChecklistEditor() {
                         {it.criterios_ia && (
                           <p className="text-xs text-muted-foreground mt-1">Critérios IA: {it.criterios_ia}</p>
                         )}
+                        {it.foto_modelo_url && (
+                          <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                            <ImageIcon className="w-3 h-3" /> Foto de exemplo configurada
+                          </p>
+                        )}
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(it)}><Pencil className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => removeItem(it)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
