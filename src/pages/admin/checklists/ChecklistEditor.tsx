@@ -91,12 +91,14 @@ export default function ChecklistEditor() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ tipo: 'foto_ia', descricao: '', criterios_ia: '' });
+    setForm({ tipo: 'foto_ia', descricao: '', criterios_ia: '', foto_modelo_url: null });
+    setFotoPreviewUrl(null);
     setOpen(true);
   };
   const openEdit = (it: Item) => {
     setEditing(it);
-    setForm({ tipo: it.tipo, descricao: it.descricao, criterios_ia: it.criterios_ia || '' });
+    setForm({ tipo: it.tipo, descricao: it.descricao, criterios_ia: it.criterios_ia || '', foto_modelo_url: it.foto_modelo_url });
+    loadFotoPreview(it.foto_modelo_url);
     setOpen(true);
   };
 
@@ -109,6 +111,7 @@ export default function ChecklistEditor() {
         tipo: form.tipo,
         descricao: form.descricao,
         criterios_ia: form.criterios_ia || null,
+        foto_modelo_url: form.foto_modelo_url,
       }).eq('id', editing.id);
       if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       else toast({ title: 'Item atualizado' });
@@ -120,6 +123,7 @@ export default function ChecklistEditor() {
         tipo: form.tipo,
         descricao: form.descricao,
         criterios_ia: form.criterios_ia || null,
+        foto_modelo_url: form.foto_modelo_url,
       });
       if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       else toast({ title: 'Item adicionado' });
