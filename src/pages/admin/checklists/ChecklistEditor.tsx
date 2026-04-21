@@ -234,11 +234,42 @@ export default function ChecklistEditor() {
                   placeholder={form.tipo === 'foto_ia' ? 'Ex: Foto da bancada limpa' : 'Ex: O frigobar está organizado?'} />
               </div>
               {form.tipo === 'foto_ia' && (
-                <div>
-                  <Label>Critérios para a IA</Label>
-                  <Textarea value={form.criterios_ia} onChange={(e) => setForm({ ...form, criterios_ia: e.target.value })} rows={4}
-                    placeholder="Descreva em linguagem natural o que a IA deve verificar. Ex: a bancada deve estar sem panos, copos ou louça suja; superfícies visíveis e secas." />
-                </div>
+                <>
+                  <div>
+                    <Label>Critérios para a IA</Label>
+                    <Textarea value={form.criterios_ia} onChange={(e) => setForm({ ...form, criterios_ia: e.target.value })} rows={4}
+                      placeholder="Descreva em linguagem natural o que a IA deve verificar. Ex: a bancada deve estar sem panos, copos ou louça suja; superfícies visíveis e secas." />
+                  </div>
+                  <div>
+                    <Label>Foto de exemplo (opcional)</Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      A IA usará essa foto como referência visual para comparar com a foto enviada pelo colaborador.
+                    </p>
+                    {fotoPreviewUrl ? (
+                      <div className="space-y-2">
+                        <img src={fotoPreviewUrl} alt="Foto modelo" className="w-full max-h-48 object-contain rounded-md border" />
+                        <Button type="button" variant="outline" size="sm" onClick={removeFotoModelo}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Remover foto
+                        </Button>
+                      </div>
+                    ) : (
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingFoto}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFotoUpload(f);
+                        }}
+                      />
+                    )}
+                    {uploadingFoto && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Enviando...
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
             <DialogFooter>
