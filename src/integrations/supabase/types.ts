@@ -14,6 +14,318 @@ export type Database = {
   }
   public: {
     Tables: {
+      checklist_agendamento_employees: {
+        Row: {
+          agendamento_id: string
+          created_at: string
+          employee_id: string
+          id: string
+        }
+        Insert: {
+          agendamento_id: string
+          created_at?: string
+          employee_id: string
+          id?: string
+        }
+        Update: {
+          agendamento_id?: string
+          created_at?: string
+          employee_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_agendamento_employees_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_agendamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_agendamento_employees_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_agendamentos: {
+        Row: {
+          ativo: boolean
+          checklist_id: string
+          company_id: string
+          created_at: string
+          hora: string
+          id: string
+          updated_at: string
+          weekly_days: Json
+        }
+        Insert: {
+          ativo?: boolean
+          checklist_id: string
+          company_id: string
+          created_at?: string
+          hora: string
+          id?: string
+          updated_at?: string
+          weekly_days?: Json
+        }
+        Update: {
+          ativo?: boolean
+          checklist_id?: string
+          company_id?: string
+          created_at?: string
+          hora?: string
+          id?: string
+          updated_at?: string
+          weekly_days?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_agendamentos_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_agendamentos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_execucoes: {
+        Row: {
+          agendamento_id: string | null
+          checklist_id: string
+          company_id: string
+          concluido_em: string | null
+          created_at: string
+          data: string
+          employee_id: string
+          id: string
+          iniciado_em: string | null
+          status: Database["public"]["Enums"]["checklist_execucao_status"]
+          updated_at: string
+        }
+        Insert: {
+          agendamento_id?: string | null
+          checklist_id: string
+          company_id: string
+          concluido_em?: string | null
+          created_at?: string
+          data?: string
+          employee_id: string
+          id?: string
+          iniciado_em?: string | null
+          status?: Database["public"]["Enums"]["checklist_execucao_status"]
+          updated_at?: string
+        }
+        Update: {
+          agendamento_id?: string | null
+          checklist_id?: string
+          company_id?: string
+          concluido_em?: string | null
+          created_at?: string
+          data?: string
+          employee_id?: string
+          id?: string
+          iniciado_em?: string | null
+          status?: Database["public"]["Enums"]["checklist_execucao_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_execucoes_agendamento_id_fkey"
+            columns: ["agendamento_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_agendamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_execucoes_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_execucoes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_execucoes_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_items: {
+        Row: {
+          checklist_id: string
+          created_at: string
+          criterios_ia: string | null
+          descricao: string
+          foto_modelo_url: string | null
+          id: string
+          ordem: number
+          tipo: Database["public"]["Enums"]["checklist_item_type"]
+          updated_at: string
+        }
+        Insert: {
+          checklist_id: string
+          created_at?: string
+          criterios_ia?: string | null
+          descricao: string
+          foto_modelo_url?: string | null
+          id?: string
+          ordem?: number
+          tipo: Database["public"]["Enums"]["checklist_item_type"]
+          updated_at?: string
+        }
+        Update: {
+          checklist_id?: string
+          created_at?: string
+          criterios_ia?: string | null
+          descricao?: string
+          foto_modelo_url?: string | null
+          id?: string
+          ordem?: number
+          tipo?: Database["public"]["Enums"]["checklist_item_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_items_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "checklists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_respostas: {
+        Row: {
+          confianca_ia: number | null
+          created_at: string
+          execucao_id: string
+          foto_url: string | null
+          id: string
+          item_id: string
+          motivo_ia: string | null
+          observacao_gestor: string | null
+          revisado_em: string | null
+          revisado_por: string | null
+          status_final: Database["public"]["Enums"]["checklist_resposta_status"]
+          status_ia:
+            | Database["public"]["Enums"]["checklist_resposta_status"]
+            | null
+          texto_resposta: string | null
+          updated_at: string
+        }
+        Insert: {
+          confianca_ia?: number | null
+          created_at?: string
+          execucao_id: string
+          foto_url?: string | null
+          id?: string
+          item_id: string
+          motivo_ia?: string | null
+          observacao_gestor?: string | null
+          revisado_em?: string | null
+          revisado_por?: string | null
+          status_final?: Database["public"]["Enums"]["checklist_resposta_status"]
+          status_ia?:
+            | Database["public"]["Enums"]["checklist_resposta_status"]
+            | null
+          texto_resposta?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confianca_ia?: number | null
+          created_at?: string
+          execucao_id?: string
+          foto_url?: string | null
+          id?: string
+          item_id?: string
+          motivo_ia?: string | null
+          observacao_gestor?: string | null
+          revisado_em?: string | null
+          revisado_por?: string | null
+          status_final?: Database["public"]["Enums"]["checklist_resposta_status"]
+          status_ia?:
+            | Database["public"]["Enums"]["checklist_resposta_status"]
+            | null
+          texto_resposta?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_respostas_execucao_id_fkey"
+            columns: ["execucao_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_execucoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_respostas_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklists: {
+        Row: {
+          ativo: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklists_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           ativo: boolean | null
@@ -1050,6 +1362,18 @@ export type Database = {
     Enums: {
       app_role: "admin" | "rh" | "gestor" | "colaborador" | "super_admin"
       approval_status: "aprovado" | "pendente" | "rejeitado"
+      checklist_execucao_status:
+        | "pendente"
+        | "em_andamento"
+        | "concluido"
+        | "reprovado"
+        | "revisar"
+      checklist_item_type: "foto_ia" | "sim_nao"
+      checklist_resposta_status:
+        | "pendente"
+        | "aprovado"
+        | "reprovado"
+        | "revisar"
       closing_status: "pendente" | "conferido" | "fechado"
       correction_status: "pendente" | "aprovado" | "rejeitado"
       document_type:
@@ -1205,6 +1529,20 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "rh", "gestor", "colaborador", "super_admin"],
       approval_status: ["aprovado", "pendente", "rejeitado"],
+      checklist_execucao_status: [
+        "pendente",
+        "em_andamento",
+        "concluido",
+        "reprovado",
+        "revisar",
+      ],
+      checklist_item_type: ["foto_ia", "sim_nao"],
+      checklist_resposta_status: [
+        "pendente",
+        "aprovado",
+        "reprovado",
+        "revisar",
+      ],
       closing_status: ["pendente", "conferido", "fechado"],
       correction_status: ["pendente", "aprovado", "rejeitado"],
       document_type: [
