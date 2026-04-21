@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     // Load resposta + item
     const { data: resp, error: respErr } = await supabase
       .from('checklist_respostas')
-      .select('id, foto_url, item_id, checklist_items!inner(descricao, criterios_ia, tipo)')
+      .select('id, foto_url, item_id, checklist_items!inner(descricao, criterios_ia, tipo, foto_modelo_url)')
       .eq('id', resposta_id)
       .single();
     if (respErr || !resp) throw new Error('Resposta não encontrada');
@@ -30,34 +30,45 @@ Deno.serve(async (req) => {
 
     const item: any = resp.checklist_items;
 
-    // Get signed URL for image
-    const { data: signed } = await supabase.storage
-      .from('checklist_fotos')
-      .createSignedUrl(resp.foto_url, 600);
-    if (!signed?.signedUrl) throw new Error('Não foi possível assinar URL da foto');
+    // Helper to fetch + b64-encode an image from a storage path
+    const fetchAsB64 = async (path: string) => {
+      const { data: signed } = await supabase.storage
+        .from('checklist_fotos')
+        .createSignedUrl(path, 600);
+      if (!signed?.signedUrl) throw new Error('Não foi possível assinar URL: ' + path);
+      const r = await fetch(signed.signedUrl);
+      if (!r.ok) throw new Error('Falha ao baixar imagem: ' + path);
+      const buf = await r.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const mime = r.headers.get('content-type') || 'image/jpeg';
+      return `data:${mime};base64,${b64}`;
+    };
 
-    // Fetch image and base64-encode
-    const imgResp = await fetch(signed.signedUrl);
-    if (!imgResp.ok) throw new Error('Falha ao baixar foto');
-    const imgBuf = await imgResp.arrayBuffer();
-    const b64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
-    const mime = imgResp.headers.get('content-type') || 'image/jpeg';
+    const fotoEnviadaDataUrl = await fetchAsB64(resp.foto_url);
+    let fotoModeloDataUrl: string | null = null;
+    if (item.foto_modelo_url) {
+      try {
+        fotoModeloDataUrl = await fetchAsB64(item.foto_modelo_url);
+      } catch (e) {
+        console.error('Falha ao carregar foto modelo, seguindo sem ela:', e);
+      }
+    }
 
-    const systemPrompt = `Você é um avaliador de checklists operacionais. Analise a foto enviada pelo colaborador comparando com a descrição do item e os critérios de aprovação. Seja rigoroso mas justo. Retorne sempre via tool call.`;
+    const systemPrompt = `Você é um avaliador de checklists operacionais. Analise a foto enviada pelo colaborador comparando com a descrição do item${fotoModeloDataUrl ? ', com a foto de referência (modelo do que se espera)' : ''} e os critérios de aprovação. Seja rigoroso mas justo. Retorne sempre via tool call.`;
 
-    const userPrompt = `Item: ${item.descricao}\n\nCritérios de aprovação:\n${item.criterios_ia || '(nenhum critério específico — avalie pelo bom senso operacional)'}\n\nAnalise a foto e diga se está aprovada.`;
+    const userPrompt = `Item: ${item.descricao}\n\nCritérios de aprovação:\n${item.criterios_ia || '(nenhum critério específico — avalie pelo bom senso operacional)'}\n\n${fotoModeloDataUrl ? 'A primeira imagem é a FOTO DE REFERÊNCIA (modelo aprovado). A segunda imagem é a FOTO ENVIADA PELO COLABORADOR. Compare as duas e avalie se a foto enviada atende ao padrão da referência.' : 'Analise a foto enviada e diga se está aprovada.'}`;
+
+    const userContent: any[] = [{ type: 'text', text: userPrompt }];
+    if (fotoModeloDataUrl) {
+      userContent.push({ type: 'image_url', image_url: { url: fotoModeloDataUrl } });
+    }
+    userContent.push({ type: 'image_url', image_url: { url: fotoEnviadaDataUrl } });
 
     const aiBody = {
       model: 'google/gemini-2.5-pro',
       messages: [
         { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userPrompt },
-            { type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } },
-          ],
-        },
+        { role: 'user', content: userContent },
       ],
       tools: [
         {

@@ -41,9 +41,40 @@ export default function ChecklistEditor() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
-  const [form, setForm] = useState<{ tipo: ItemType; descricao: string; criterios_ia: string }>({
-    tipo: 'foto_ia', descricao: '', criterios_ia: ''
+  const [form, setForm] = useState<{ tipo: ItemType; descricao: string; criterios_ia: string; foto_modelo_url: string | null }>({
+    tipo: 'foto_ia', descricao: '', criterios_ia: '', foto_modelo_url: null
   });
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [fotoPreviewUrl, setFotoPreviewUrl] = useState<string | null>(null);
+
+  const loadFotoPreview = async (path: string | null) => {
+    if (!path) { setFotoPreviewUrl(null); return; }
+    const { data } = await supabase.storage.from('checklist_fotos').createSignedUrl(path, 600);
+    setFotoPreviewUrl(data?.signedUrl || null);
+  };
+
+  const handleFotoUpload = async (file: File) => {
+    if (!id) return;
+    setUploadingFoto(true);
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `modelos/${id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('checklist_fotos').upload(path, file, { upsert: false, contentType: file.type });
+    if (error) {
+      toast({ title: 'Erro ao enviar foto', description: error.message, variant: 'destructive' });
+    } else {
+      setForm((f) => ({ ...f, foto_modelo_url: path }));
+      await loadFotoPreview(path);
+    }
+    setUploadingFoto(false);
+  };
+
+  const removeFotoModelo = async () => {
+    if (form.foto_modelo_url) {
+      await supabase.storage.from('checklist_fotos').remove([form.foto_modelo_url]);
+    }
+    setForm((f) => ({ ...f, foto_modelo_url: null }));
+    setFotoPreviewUrl(null);
+  };
 
   const load = async () => {
     if (!id) return;
@@ -60,12 +91,14 @@ export default function ChecklistEditor() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ tipo: 'foto_ia', descricao: '', criterios_ia: '' });
+    setForm({ tipo: 'foto_ia', descricao: '', criterios_ia: '', foto_modelo_url: null });
+    setFotoPreviewUrl(null);
     setOpen(true);
   };
   const openEdit = (it: Item) => {
     setEditing(it);
-    setForm({ tipo: it.tipo, descricao: it.descricao, criterios_ia: it.criterios_ia || '' });
+    setForm({ tipo: it.tipo, descricao: it.descricao, criterios_ia: it.criterios_ia || '', foto_modelo_url: it.foto_modelo_url });
+    loadFotoPreview(it.foto_modelo_url);
     setOpen(true);
   };
 
@@ -78,6 +111,7 @@ export default function ChecklistEditor() {
         tipo: form.tipo,
         descricao: form.descricao,
         criterios_ia: form.criterios_ia || null,
+        foto_modelo_url: form.foto_modelo_url,
       }).eq('id', editing.id);
       if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       else toast({ title: 'Item atualizado' });
@@ -89,6 +123,7 @@ export default function ChecklistEditor() {
         tipo: form.tipo,
         descricao: form.descricao,
         criterios_ia: form.criterios_ia || null,
+        foto_modelo_url: form.foto_modelo_url,
       });
       if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
       else toast({ title: 'Item adicionado' });
@@ -166,6 +201,11 @@ export default function ChecklistEditor() {
                         {it.criterios_ia && (
                           <p className="text-xs text-muted-foreground mt-1">Critérios IA: {it.criterios_ia}</p>
                         )}
+                        {it.foto_modelo_url && (
+                          <p className="text-xs text-primary mt-1 flex items-center gap-1">
+                            <ImageIcon className="w-3 h-3" /> Foto de exemplo configurada
+                          </p>
+                        )}
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => openEdit(it)}><Pencil className="w-4 h-4" /></Button>
                       <Button variant="ghost" size="icon" onClick={() => removeItem(it)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
@@ -199,11 +239,42 @@ export default function ChecklistEditor() {
                   placeholder={form.tipo === 'foto_ia' ? 'Ex: Foto da bancada limpa' : 'Ex: O frigobar está organizado?'} />
               </div>
               {form.tipo === 'foto_ia' && (
-                <div>
-                  <Label>Critérios para a IA</Label>
-                  <Textarea value={form.criterios_ia} onChange={(e) => setForm({ ...form, criterios_ia: e.target.value })} rows={4}
-                    placeholder="Descreva em linguagem natural o que a IA deve verificar. Ex: a bancada deve estar sem panos, copos ou louça suja; superfícies visíveis e secas." />
-                </div>
+                <>
+                  <div>
+                    <Label>Critérios para a IA</Label>
+                    <Textarea value={form.criterios_ia} onChange={(e) => setForm({ ...form, criterios_ia: e.target.value })} rows={4}
+                      placeholder="Descreva em linguagem natural o que a IA deve verificar. Ex: a bancada deve estar sem panos, copos ou louça suja; superfícies visíveis e secas." />
+                  </div>
+                  <div>
+                    <Label>Foto de exemplo (opcional)</Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      A IA usará essa foto como referência visual para comparar com a foto enviada pelo colaborador.
+                    </p>
+                    {fotoPreviewUrl ? (
+                      <div className="space-y-2">
+                        <img src={fotoPreviewUrl} alt="Foto modelo" className="w-full max-h-48 object-contain rounded-md border" />
+                        <Button type="button" variant="outline" size="sm" onClick={removeFotoModelo}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Remover foto
+                        </Button>
+                      </div>
+                    ) : (
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        disabled={uploadingFoto}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFotoUpload(f);
+                        }}
+                      />
+                    )}
+                    {uploadingFoto && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Enviando...
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
             <DialogFooter>
