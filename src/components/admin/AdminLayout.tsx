@@ -72,6 +72,7 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
     { id: 'hourbank', label: 'Banco de Horas', icon: Wallet, href: '/admin/hourbank' },
     { id: 'closing', label: 'Fechamento Mensal', icon: FileCheck, href: '/admin/closing' },
     { id: 'documents', label: 'Documentos', icon: FileText, href: '/admin/documents' },
+    { id: 'checklists', label: 'Checklists', icon: ListChecks, href: '/admin/checklists' },
     { id: 'users', label: 'Usuários', icon: Shield, href: '/admin/users' },
     { id: 'settings', label: 'Configurações', icon: Settings, href: '/admin/settings' },
     ...(isSuperAdmin ? [{ id: 'companies', label: 'Empresas', icon: Building, href: '/admin/companies' }] : []),
