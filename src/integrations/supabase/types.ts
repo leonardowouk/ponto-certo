@@ -58,6 +58,7 @@ export type Database = {
           created_at: string
           hora: string
           id: string
+          lembrete_apos_minutos: number | null
           updated_at: string
           weekly_days: Json
         }
@@ -68,6 +69,7 @@ export type Database = {
           created_at?: string
           hora: string
           id?: string
+          lembrete_apos_minutos?: number | null
           updated_at?: string
           weekly_days?: Json
         }
@@ -78,6 +80,7 @@ export type Database = {
           created_at?: string
           hora?: string
           id?: string
+          lembrete_apos_minutos?: number | null
           updated_at?: string
           weekly_days?: Json
         }
@@ -109,6 +112,7 @@ export type Database = {
           employee_id: string
           id: string
           iniciado_em: string | null
+          lembrete_enviado_em: string | null
           status: Database["public"]["Enums"]["checklist_execucao_status"]
           updated_at: string
         }
@@ -122,6 +126,7 @@ export type Database = {
           employee_id: string
           id?: string
           iniciado_em?: string | null
+          lembrete_enviado_em?: string | null
           status?: Database["public"]["Enums"]["checklist_execucao_status"]
           updated_at?: string
         }
@@ -135,6 +140,7 @@ export type Database = {
           employee_id?: string
           id?: string
           iniciado_em?: string | null
+          lembrete_enviado_em?: string | null
           status?: Database["public"]["Enums"]["checklist_execucao_status"]
           updated_at?: string
         }
