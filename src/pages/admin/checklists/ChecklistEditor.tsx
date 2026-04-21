@@ -41,9 +41,40 @@ export default function ChecklistEditor() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
-  const [form, setForm] = useState<{ tipo: ItemType; descricao: string; criterios_ia: string }>({
-    tipo: 'foto_ia', descricao: '', criterios_ia: ''
+  const [form, setForm] = useState<{ tipo: ItemType; descricao: string; criterios_ia: string; foto_modelo_url: string | null }>({
+    tipo: 'foto_ia', descricao: '', criterios_ia: '', foto_modelo_url: null
   });
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [fotoPreviewUrl, setFotoPreviewUrl] = useState<string | null>(null);
+
+  const loadFotoPreview = async (path: string | null) => {
+    if (!path) { setFotoPreviewUrl(null); return; }
+    const { data } = await supabase.storage.from('checklist_fotos').createSignedUrl(path, 600);
+    setFotoPreviewUrl(data?.signedUrl || null);
+  };
+
+  const handleFotoUpload = async (file: File) => {
+    if (!id) return;
+    setUploadingFoto(true);
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `modelos/${id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('checklist_fotos').upload(path, file, { upsert: false, contentType: file.type });
+    if (error) {
+      toast({ title: 'Erro ao enviar foto', description: error.message, variant: 'destructive' });
+    } else {
+      setForm((f) => ({ ...f, foto_modelo_url: path }));
+      await loadFotoPreview(path);
+    }
+    setUploadingFoto(false);
+  };
+
+  const removeFotoModelo = async () => {
+    if (form.foto_modelo_url) {
+      await supabase.storage.from('checklist_fotos').remove([form.foto_modelo_url]);
+    }
+    setForm((f) => ({ ...f, foto_modelo_url: null }));
+    setFotoPreviewUrl(null);
+  };
 
   const load = async () => {
     if (!id) return;
