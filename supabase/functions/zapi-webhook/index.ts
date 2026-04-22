@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!employee) {
-      await sendWpp(baseUrl, clientToken, phone, 'Olá! Não localizei seu cadastro como colaborador. Procure o RH.');
+      console.warn('employee not found for incoming message', { phone, company_id: integration.company_id });
       return new Response('ok', { headers: corsHeaders });
     }
 
