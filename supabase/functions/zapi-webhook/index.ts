@@ -43,6 +43,11 @@ async function sendWpp(baseUrl: string, clientToken: string | null, phone: strin
   });
 }
 
+function isRecentDuplicate(updatedAt: string | null | undefined, windowMs = 60_000) {
+  if (!updatedAt) return false;
+  return Date.now() - new Date(updatedAt).getTime() < windowMs;
+}
+
 function buildChecklistMessage(name: string, items: any[]): string {
   let msg = `📋 *${name}*\n\nResponda cada item com o número:\n\n`;
   items.forEach((it: any, i: number) => {
@@ -321,17 +326,30 @@ Deno.serve(async (req) => {
 
     const item = sessionItems[itemNum - 1];
 
+    const { data: existingResponse } = await supabase
+      .from('checklist_respostas')
+      .select('id, texto_resposta, foto_url, updated_at')
+      .eq('execucao_id', session.execucao_id)
+      .eq('item_id', item.id)
+      .maybeSingle();
+
     if (item.tipo === 'sim_nao') {
       const v = parseSimNao(textValue);
       if (v === null) {
         await sendWpp(baseUrl, clientToken, phone, `Item ${itemNum} espera *sim* ou *não*. Ex: ${itemNum} sim`);
         return new Response('ok', { headers: corsHeaders });
       }
+
+      const normalizedAnswer = v ? 'sim' : 'não';
+      if (existingResponse?.texto_resposta === normalizedAnswer && isRecentDuplicate(existingResponse.updated_at)) {
+        return new Response('ok', { headers: corsHeaders });
+      }
+
       await supabase.from('checklist_respostas').upsert(
         {
           execucao_id: session.execucao_id,
           item_id: item.id,
-          texto_resposta: v ? 'sim' : 'não',
+          texto_resposta: normalizedAnswer,
           status_final: v ? 'aprovado' : 'reprovado',
         },
         { onConflict: 'execucao_id,item_id' as any }
@@ -342,6 +360,11 @@ Deno.serve(async (req) => {
         await sendWpp(baseUrl, clientToken, phone, `Item ${itemNum} precisa de uma *foto*. Envie a imagem com legenda: ${itemNum}`);
         return new Response('ok', { headers: corsHeaders });
       }
+
+      if (existingResponse?.foto_url && isRecentDuplicate(existingResponse.updated_at)) {
+        return new Response('ok', { headers: corsHeaders });
+      }
+
       // Download image and upload to storage
       const imgResp = await fetch(imageUrl);
       if (!imgResp.ok) {
