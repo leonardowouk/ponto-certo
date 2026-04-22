@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('company_id', companyId)
       .eq('integration_type', 'zapi')
+      .eq('is_active', true)
       .maybeSingle();
 
     if (!integration?.instance_id || !integration?.instance_token) {
