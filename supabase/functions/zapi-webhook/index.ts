@@ -12,6 +12,26 @@ function normPhone(p: string): string {
   return c;
 }
 
+function phoneVariants(p: string): string[] {
+  const normalized = normPhone(p);
+  const local = normalized.startsWith('55') ? normalized.slice(2) : normalized;
+  const variants = new Set([normalized, local, String(p || '').replace(/\D/g, '')]);
+
+  if (local.length === 11 && local[2] === '9') {
+    const withoutNinth = `${local.slice(0, 2)}${local.slice(3)}`;
+    variants.add(withoutNinth);
+    variants.add(`55${withoutNinth}`);
+  }
+
+  if (local.length === 10) {
+    const withNinth = `${local.slice(0, 2)}9${local.slice(2)}`;
+    variants.add(withNinth);
+    variants.add(`55${withNinth}`);
+  }
+
+  return Array.from(variants).filter(Boolean);
+}
+
 async function sendWpp(baseUrl: string, clientToken: string | null, phone: string, message: string) {
   await fetch(`${baseUrl}/send-text`, {
     method: 'POST',
@@ -75,12 +95,14 @@ Deno.serve(async (req) => {
     if (fromMe) return new Response('ok', { headers: corsHeaders });
 
     const phone = normPhone(body.phone || body.from || '');
+    const phones = phoneVariants(body.phone || body.from || '');
     const instanceId = body.instanceId || body.instance_id || '';
     const messageText: string = (body.text?.message || body.message || body.body || '').toString().trim();
     const imageUrl: string | null = body.image?.imageUrl || body.image?.url || null;
     const imageCaption: string = (body.image?.caption || '').toString().trim();
+    const hasIncomingContent = Boolean(messageText || imageUrl || imageCaption);
 
-    if (!phone) {
+    if (!phone || !hasIncomingContent) {
       return new Response(JSON.stringify({ ok: false, reason: 'no phone' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -94,6 +116,7 @@ Deno.serve(async (req) => {
         .select('*')
         .eq('integration_type', 'zapi')
         .eq('instance_id', instanceId)
+        .eq('is_active', true)
         .maybeSingle();
       integration = data;
     }
@@ -110,6 +133,7 @@ Deno.serve(async (req) => {
           .select('*')
           .eq('company_id', emps[0].company_id)
           .eq('integration_type', 'zapi')
+          .eq('is_active', true)
           .maybeSingle();
         integration = data;
       }
@@ -126,7 +150,7 @@ Deno.serve(async (req) => {
     const { data: employee } = await supabase
       .from('employees')
       .select('id, nome, company_id')
-      .eq('telefone', phone)
+      .in('telefone', phones)
       .eq('company_id', integration.company_id)
       .eq('ativo', true)
       .maybeSingle();
@@ -140,7 +164,7 @@ Deno.serve(async (req) => {
     const { data: session } = await supabase
       .from('checklist_whatsapp_sessions')
       .select('*')
-      .eq('phone', phone)
+      .in('phone', phones)
       .eq('company_id', integration.company_id)
       .gt('expires_at', new Date().toISOString())
       .maybeSingle();
