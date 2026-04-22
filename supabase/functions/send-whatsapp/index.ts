@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('company_id', company_id)
       .eq('integration_type', 'zapi')
+      .eq('is_active', true)
       .single();
 
     if (intError || !integration) throw new Error('Integração Z-API não configurada para esta empresa');
