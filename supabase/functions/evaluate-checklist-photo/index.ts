@@ -40,13 +40,7 @@ Deno.serve(async (req) => {
       const r = await fetch(signed.signedUrl);
       if (!r.ok) throw new Error('Falha ao baixar imagem: ' + path);
       const buf = await r.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      const chunkSize = 0x8000; // 32KB chunks to avoid stack overflow
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)));
-      }
-      const b64 = btoa(binary);
+      const b64 = encodeBase64(new Uint8Array(buf));
       const mime = r.headers.get('content-type') || 'image/jpeg';
       return `data:${mime};base64,${b64}`;
     };
