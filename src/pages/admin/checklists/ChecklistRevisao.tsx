@@ -39,6 +39,7 @@ export default function ChecklistRevisao() {
   const [loading, setLoading] = useState(true);
   const [obs, setObs] = useState<Record<string, string>>({});
   const [acting, setActing] = useState<string | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   const load = async () => {
     if (!selectedCompanyId) return;
@@ -65,8 +66,30 @@ export default function ChecklistRevisao() {
       .eq('status_final', 'revisar')
       .order('created_at', { ascending: true });
     if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    setItems((data || []) as any);
+    const list = (data || []) as any as RevisaoItem[];
+    setItems(list);
     setLoading(false);
+
+    // Generate signed URLs for photos
+    const urls: Record<string, string> = {};
+    await Promise.all(
+      list
+        .filter((r) => r.foto_url)
+        .map(async (r) => {
+          const path = r.foto_url!;
+          // If it's already a full URL, use as-is
+          if (path.startsWith('http')) {
+            urls[r.id] = path;
+            return;
+          }
+          const cleanPath = path.replace(/^checklist_fotos\//, '');
+          const { data: signed } = await supabase.storage
+            .from('checklist_fotos')
+            .createSignedUrl(cleanPath, 3600);
+          if (signed?.signedUrl) urls[r.id] = signed.signedUrl;
+        })
+    );
+    setSignedUrls(urls);
   };
 
   useEffect(() => {
@@ -169,13 +192,19 @@ export default function ChecklistRevisao() {
                     </div>
 
                     {r.foto_url ? (
-                      <a href={r.foto_url} target="_blank" rel="noreferrer" className="block">
-                        <img
-                          src={r.foto_url}
-                          alt="resposta"
-                          className="w-full max-h-72 object-contain rounded border bg-muted"
-                        />
-                      </a>
+                      signedUrls[r.id] ? (
+                        <a href={signedUrls[r.id]} target="_blank" rel="noreferrer" className="block">
+                          <img
+                            src={signedUrls[r.id]}
+                            alt="resposta"
+                            className="w-full max-h-72 object-contain rounded border bg-muted"
+                          />
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground border rounded p-3">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Carregando foto...
+                        </div>
+                      )
                     ) : (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground border rounded p-3">
                         <ImageOff className="w-4 h-4" /> Sem foto
