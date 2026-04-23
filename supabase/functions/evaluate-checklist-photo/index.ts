@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { encodeBase64 } from 'https://deno.land/std@0.224.0/encoding/base64.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,7 +40,7 @@ Deno.serve(async (req) => {
       const r = await fetch(signed.signedUrl);
       if (!r.ok) throw new Error('Falha ao baixar imagem: ' + path);
       const buf = await r.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const b64 = encodeBase64(new Uint8Array(buf));
       const mime = r.headers.get('content-type') || 'image/jpeg';
       return `data:${mime};base64,${b64}`;
     };
