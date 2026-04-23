@@ -39,6 +39,7 @@ export default function ChecklistRevisao() {
   const [loading, setLoading] = useState(true);
   const [obs, setObs] = useState<Record<string, string>>({});
   const [acting, setActing] = useState<string | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   const load = async () => {
     if (!selectedCompanyId) return;
