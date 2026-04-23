@@ -66,8 +66,30 @@ export default function ChecklistRevisao() {
       .eq('status_final', 'revisar')
       .order('created_at', { ascending: true });
     if (error) toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-    setItems((data || []) as any);
+    const list = (data || []) as any as RevisaoItem[];
+    setItems(list);
     setLoading(false);
+
+    // Generate signed URLs for photos
+    const urls: Record<string, string> = {};
+    await Promise.all(
+      list
+        .filter((r) => r.foto_url)
+        .map(async (r) => {
+          const path = r.foto_url!;
+          // If it's already a full URL, use as-is
+          if (path.startsWith('http')) {
+            urls[r.id] = path;
+            return;
+          }
+          const cleanPath = path.replace(/^checklist_fotos\//, '');
+          const { data: signed } = await supabase.storage
+            .from('checklist_fotos')
+            .createSignedUrl(cleanPath, 3600);
+          if (signed?.signedUrl) urls[r.id] = signed.signedUrl;
+        })
+    );
+    setSignedUrls(urls);
   };
 
   useEffect(() => {
