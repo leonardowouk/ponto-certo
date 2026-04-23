@@ -192,13 +192,19 @@ export default function ChecklistRevisao() {
                     </div>
 
                     {r.foto_url ? (
-                      <a href={r.foto_url} target="_blank" rel="noreferrer" className="block">
-                        <img
-                          src={r.foto_url}
-                          alt="resposta"
-                          className="w-full max-h-72 object-contain rounded border bg-muted"
-                        />
-                      </a>
+                      signedUrls[r.id] ? (
+                        <a href={signedUrls[r.id]} target="_blank" rel="noreferrer" className="block">
+                          <img
+                            src={signedUrls[r.id]}
+                            alt="resposta"
+                            className="w-full max-h-72 object-contain rounded border bg-muted"
+                          />
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground border rounded p-3">
+                          <Loader2 className="w-4 h-4 animate-spin" /> Carregando foto...
+                        </div>
+                      )
                     ) : (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground border rounded p-3">
                         <ImageOff className="w-4 h-4" /> Sem foto
