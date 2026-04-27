@@ -45,6 +45,8 @@ const stepToNumber: Record<Step, number> = {
   pin: 2,
   confirm: 3,
   selfie: 4,
+  extra_form: 1,
+  extra_selfie: 2,
   success: 5,
 };
 
