@@ -675,6 +675,104 @@ export type Database = {
           },
         ]
       }
+      extra_people: {
+        Row: {
+          company_id: string
+          cpf_encrypted: string | null
+          cpf_hash: string
+          cpf_last4: string | null
+          created_at: string
+          foto_url: string | null
+          id: string
+          nome_completo: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          cpf_encrypted?: string | null
+          cpf_hash: string
+          cpf_last4?: string | null
+          created_at?: string
+          foto_url?: string | null
+          id?: string
+          nome_completo: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          cpf_encrypted?: string | null
+          cpf_hash?: string
+          cpf_last4?: string | null
+          created_at?: string
+          foto_url?: string | null
+          id?: string
+          nome_completo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      extra_time_records: {
+        Row: {
+          company_id: string
+          comprovante_pagamento_url: string | null
+          created_at: string
+          created_by: string | null
+          entrada_at: string
+          entrada_foto_url: string | null
+          extra_person_id: string
+          id: string
+          observacao_admin: string | null
+          record_date: string
+          saida_at: string | null
+          saida_foto_url: string | null
+          total_minutes: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          company_id: string
+          comprovante_pagamento_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          entrada_at?: string
+          entrada_foto_url?: string | null
+          extra_person_id: string
+          id?: string
+          observacao_admin?: string | null
+          record_date?: string
+          saida_at?: string | null
+          saida_foto_url?: string | null
+          total_minutes?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          comprovante_pagamento_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          entrada_at?: string
+          entrada_foto_url?: string | null
+          extra_person_id?: string
+          id?: string
+          observacao_admin?: string | null
+          record_date?: string
+          saida_at?: string | null
+          saida_foto_url?: string | null
+          total_minutes?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extra_time_records_extra_person_id_fkey"
+            columns: ["extra_person_id"]
+            isOneToOne: false
+            referencedRelation: "extra_people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hour_bank_balance: {
         Row: {
           balance_minutes: number | null

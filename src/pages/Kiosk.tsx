@@ -7,14 +7,16 @@ import { ConfirmIdentity } from '@/components/kiosk/ConfirmIdentity';
 import { SelfieCapture } from '@/components/kiosk/SelfieCapture';
 import { PunchSuccess } from '@/components/kiosk/PunchSuccess';
 import { ProgressIndicator } from '@/components/kiosk/ProgressIndicator';
+import { ExtraRegistrationForm } from '@/components/kiosk/ExtraRegistrationForm';
 import { supabase } from '@/integrations/supabase/client';
 import { hashCPF } from '@/lib/hash';
 import { useInactivityTimeout } from '@/hooks/useInactivityTimeout';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, UserPlus } from 'lucide-react';
 
-type Step = 'cpf' | 'pin' | 'confirm' | 'selfie' | 'success';
+type Step = 'cpf' | 'pin' | 'confirm' | 'selfie' | 'extra_form' | 'extra_selfie' | 'success';
 
 interface EmployeeData {
   id: string;
@@ -28,6 +30,11 @@ interface PunchResult {
   selfieImage: string;
 }
 
+interface ExtraData {
+  nomeCompleto: string;
+  cpf: string;
+}
+
 // Para demo, usamos um device_secret fixo. Em produção, seria configurado no tablet.
 const DEVICE_SECRET = 'demo-device-secret-123';
 const UNIDADE = 'Matriz';
@@ -38,6 +45,8 @@ const stepToNumber: Record<Step, number> = {
   pin: 2,
   confirm: 3,
   selfie: 4,
+  extra_form: 1,
+  extra_selfie: 2,
   success: 5,
 };
 
@@ -50,6 +59,7 @@ export default function KioskPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [selfieSessionId, setSelfieSessionId] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [extraData, setExtraData] = useState<ExtraData | null>(null);
   const { toast } = useToast();
   const { isOnline } = useOnlineStatus();
   const navigate = useNavigate();
@@ -63,6 +73,7 @@ export default function KioskPage() {
     setIsLoading(false);
     setSelfieSessionId(0);
     setIsAdmin(false);
+    setExtraData(null);
   }, []);
 
   // Inactivity timeout - reset after 60 seconds of no activity
@@ -201,6 +212,19 @@ export default function KioskPage() {
     setStep('selfie');
   };
 
+  const handleStartExtra = () => {
+    setExtraData(null);
+    setPunchResult(null);
+    setSelfieSessionId(prev => prev + 1);
+    setStep('extra_form');
+  };
+
+  const handleExtraFormSubmit = (data: ExtraData) => {
+    setExtraData(data);
+    setSelfieSessionId(prev => prev + 1);
+    setStep('extra_selfie');
+  };
+
   const handleSelfieCapture = async (imageData: string) => {
     if (!employee) return;
     if (!checkOnline()) return;
@@ -258,12 +282,60 @@ export default function KioskPage() {
     }
   };
 
+  const handleExtraSelfieCapture = async (imageData: string) => {
+    if (!extraData) return;
+    if (!checkOnline()) return;
+
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('extra-time-record', {
+        body: {
+          nome_completo: extraData.nomeCompleto,
+          cpf: extraData.cpf,
+          device_secret: DEVICE_SECRET,
+          selfie_image: imageData,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({
+          title: 'Erro no registro extra',
+          description: data?.message || 'Tente novamente.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setEmployee({ id: 'extra', nome: extraData.nomeCompleto });
+      setPunchResult({
+        punchType: data.action === 'saida' ? 'saida' : 'entrada',
+        punchTime: new Date(data.registered_at),
+        selfieImage: imageData,
+      });
+      setStep('success');
+    } catch (err) {
+      console.error('Extra punch error:', err);
+      toast({
+        title: 'Erro de conexão',
+        description: 'Verifique sua internet e tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleBack = () => {
     if (step === 'pin') {
       setStep('cpf');
       setPinError('');
     } else if (step === 'confirm') {
       setStep('pin');
+    } else if (step === 'extra_form') {
+      setStep('cpf');
+    } else if (step === 'extra_selfie') {
+      setStep('extra_form');
     }
   };
 
@@ -294,10 +366,23 @@ export default function KioskPage() {
   }, []);
 
   const currentStepNumber = stepToNumber[step];
-  const showProgress = step !== 'success';
+  const showProgress = !['success', 'extra_form', 'extra_selfie'].includes(step);
 
   return (
     <KioskLayout>
+      {step === 'cpf' && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleStartExtra}
+          className="fixed left-4 bottom-4 z-10 text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+        >
+          <UserPlus className="w-4 h-4 mr-2" />
+          Registro Extra
+        </Button>
+      )}
+
       {showProgress && (
         <div className="mb-4">
           <ProgressIndicator currentStep={currentStepNumber} totalSteps={4} />
@@ -332,6 +417,18 @@ export default function KioskPage() {
         <SelfieCapture 
           key={`selfie-${selfieSessionId}`}
           onCapture={handleSelfieCapture}
+          isLoading={isLoading}
+        />
+      )}
+
+      {step === 'extra_form' && (
+        <ExtraRegistrationForm onSubmit={handleExtraFormSubmit} onBack={handleBack} />
+      )}
+
+      {step === 'extra_selfie' && (
+        <SelfieCapture
+          key={`extra-selfie-${selfieSessionId}`}
+          onCapture={handleExtraSelfieCapture}
           isLoading={isLoading}
         />
       )}
