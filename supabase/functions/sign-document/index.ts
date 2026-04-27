@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const VERSION = "2026-03-09.2";
+const VERSION = "2026-04-27.1";
+const MAX_PIN_ATTEMPTS = 5;
+const LOCK_MINUTES = 10;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,6 +27,21 @@ async function verifyPin(pinHash: string, pin: string): Promise<boolean> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   return `${salt}:${hashHex}` === pinHash;
+}
+
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status,
+  });
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isValidPin(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4,8}$/.test(value);
 }
 
 serve(async (req) => {
@@ -51,14 +68,27 @@ serve(async (req) => {
       authUserId = user?.id || null;
     }
 
+    if (req.method !== 'POST') {
+      return json({ error: 'Método não permitido' }, 405);
+    }
+
     const body = await req.json();
     const { signature_id, pin, acceptance_text, signed_via, selfie_url, otp_code } = body;
 
-    if (!signature_id || !pin || !acceptance_text) {
-      return new Response(
-        JSON.stringify({ error: 'Campos obrigatórios: signature_id, pin, acceptance_text' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    if (!isUuid(signature_id) || !isValidPin(pin) || typeof acceptance_text !== 'string' || acceptance_text.trim().length < 10 || acceptance_text.length > 2000) {
+      return json({ error: 'Dados de assinatura inválidos' }, 400);
+    }
+
+    if (signed_via && !['portal', 'admin'].includes(String(signed_via))) {
+      return json({ error: 'Origem de assinatura inválida' }, 400);
+    }
+
+    if (selfie_url && (typeof selfie_url !== 'string' || selfie_url.length > 500)) {
+      return json({ error: 'Foto de assinatura inválida' }, 400);
+    }
+
+    if (otp_code && (typeof otp_code !== 'string' || !/^\d{4,8}$/.test(otp_code))) {
+      return json({ error: 'Código de verificação inválido' }, 400);
     }
 
     // Get signature + document + employee data
@@ -69,41 +99,59 @@ serve(async (req) => {
       .single();
 
     if (sigErr || !sig) {
-      return new Response(
-        JSON.stringify({ error: 'Assinatura não encontrada' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-      );
+      return json({ error: 'Assinatura não encontrada' }, 404);
     }
 
     if (sig.status === 'assinado') {
-      return new Response(
-        JSON.stringify({ error: 'Documento já foi assinado' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return json({ error: 'Documento já foi assinado' }, 400);
     }
 
     // Get employee PIN hash
     const { data: emp } = await supabase
       .from('employees')
-      .select('pin_hash, nome')
+      .select('pin_hash, nome, failed_attempts, locked_until')
       .eq('id', sig.employee_id)
       .single();
 
     if (!emp) {
-      return new Response(
-        JSON.stringify({ error: 'Colaborador não encontrado' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-      );
+      return json({ error: 'Colaborador não encontrado' }, 404);
+    }
+
+    if (emp.locked_until && new Date(emp.locked_until) > new Date()) {
+      const remainingMinutes = Math.ceil((new Date(emp.locked_until).getTime() - Date.now()) / 60000);
+      return json({ error: `Conta bloqueada. Tente novamente em ${remainingMinutes} minutos.` }, 423);
     }
 
     // Verify PIN
     const pinValid = await verifyPin(emp.pin_hash, pin);
     if (!pinValid) {
-      return new Response(
-        JSON.stringify({ error: 'PIN incorreto' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
-      );
+      const newAttempts = (emp.failed_attempts || 0) + 1;
+      const updateData: Record<string, unknown> = { failed_attempts: newAttempts };
+
+      if (newAttempts >= MAX_PIN_ATTEMPTS) {
+        updateData.locked_until = new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString();
+      }
+
+      await supabase.from('employees').update(updateData).eq('id', sig.employee_id);
+      await supabase.from('signature_audit_log').insert({
+        signature_id: sig.id,
+        document_id: sig.document_id,
+        employee_id: sig.employee_id,
+        action: newAttempts >= MAX_PIN_ATTEMPTS ? 'pin_lockout' : 'pin_failed',
+        ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown',
+        user_agent: req.headers.get('user-agent') || 'unknown',
+        pin_verified: false,
+        signed_via: signed_via || 'portal',
+        auth_user_id: authUserId,
+      });
+
+      return json({ error: newAttempts >= MAX_PIN_ATTEMPTS ? `Muitas tentativas. Conta bloqueada por ${LOCK_MINUTES} minutos.` : 'PIN incorreto' }, 401);
     }
+
+    await supabase
+      .from('employees')
+      .update({ failed_attempts: 0, locked_until: null })
+      .eq('id', sig.employee_id);
 
     // Validate OTP if provided
     if (otp_code) {
