@@ -680,6 +680,7 @@ export type Database = {
           company_id: string
           cpf_encrypted: string | null
           cpf_hash: string
+          cpf_last4: string | null
           created_at: string
           foto_url: string | null
           id: string
@@ -690,6 +691,7 @@ export type Database = {
           company_id: string
           cpf_encrypted?: string | null
           cpf_hash: string
+          cpf_last4?: string | null
           created_at?: string
           foto_url?: string | null
           id?: string
@@ -700,6 +702,7 @@ export type Database = {
           company_id?: string
           cpf_encrypted?: string | null
           cpf_hash?: string
+          cpf_last4?: string | null
           created_at?: string
           foto_url?: string | null
           id?: string
