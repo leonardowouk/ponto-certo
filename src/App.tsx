@@ -16,6 +16,7 @@ import Companies from "./pages/admin/Companies";
 import MonthlyClosing from "./pages/admin/MonthlyClosing";
 import Documents from "./pages/admin/Documents";
 import Users from "./pages/admin/Users";
+import Extras from "./pages/admin/Extras";
 import ChecklistsList from "./pages/admin/checklists/ChecklistsList";
 import ChecklistEditor from "./pages/admin/checklists/ChecklistEditor";
 import ChecklistAgendamentos from "./pages/admin/checklists/ChecklistAgendamentos";
@@ -48,6 +49,7 @@ const AdminRoutes = () => (
       <Route path="/closing" element={<MonthlyClosing />} />
       <Route path="/documents" element={<Documents />} />
       <Route path="/users" element={<Users />} />
+      <Route path="/extras" element={<Extras />} />
       <Route path="/checklists" element={<ChecklistsList />} />
       <Route path="/checklists/dashboard" element={<ChecklistDashboard />} />
       <Route path="/checklists/agendamentos" element={<ChecklistAgendamentos />} />
