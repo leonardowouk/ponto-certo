@@ -17,7 +17,13 @@ Deno.serve(async (req) => {
     );
 
     // Verify caller is admin
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Não autorizado" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const token = authHeader.replace("Bearer ", "");
     const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !caller) {
@@ -33,6 +39,7 @@ Deno.serve(async (req) => {
       .eq("user_id", caller.id);
     
     const isAdmin = callerRoles?.some(r => ["admin", "super_admin"].includes(r.role));
+    const isSuperAdmin = callerRoles?.some(r => r.role === "super_admin") ?? false;
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: "Sem permissão" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
