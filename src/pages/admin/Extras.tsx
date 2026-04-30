@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -61,7 +62,8 @@ export default function Extras() {
   const [records, setRecords] = useState<ExtraRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [search, setSearch] = useState('');
+  const [filterPersonId, setFilterPersonId] = useState<string>('all');
+  const [extraPeople, setExtraPeople] = useState<ExtraPerson[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<ExtraPerson | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -88,17 +90,23 @@ export default function Extras() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [selectedCompanyId, filterDate]);
+  // Load extra people list
+  const loadPeople = async () => {
+    if (!selectedCompanyId) return;
+    const { data } = await (supabase as any)
+      .from('extra_people')
+      .select('id, nome_completo, cpf_last4, foto_url')
+      .eq('company_id', selectedCompanyId)
+      .order('nome_completo');
+    setExtraPeople((data || []) as ExtraPerson[]);
+  };
+
+  useEffect(() => { load(); loadPeople(); }, [selectedCompanyId, filterDate]);
 
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return records;
-    return records.filter((record) => {
-      const name = record.extra_people?.nome_completo?.toLowerCase() || '';
-      const cpf = record.extra_people?.cpf_last4 || '';
-      return name.includes(term) || cpf.includes(term);
-    });
-  }, [records, search]);
+    if (filterPersonId === 'all') return records;
+    return records.filter(r => r.extra_people?.id === filterPersonId);
+  }, [records, filterPersonId]);
 
   const personRecords = useMemo(() => {
     if (!selectedPerson) return [];
@@ -193,10 +201,22 @@ export default function Extras() {
               <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
             </div>
             <div className="min-w-[260px]">
-              <label className="text-xs text-muted-foreground">Buscar</label>
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Nome ou final do CPF" />
+              <label className="text-xs text-muted-foreground">Pessoa</label>
+              <Select value={filterPersonId} onValueChange={setFilterPersonId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as pessoas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as pessoas</SelectItem>
+                  {extraPeople.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome_completo} {p.cpf_last4 ? `(***${p.cpf_last4})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Button variant="outline" onClick={() => { setFilterDate(''); setSearch(''); }}>Limpar</Button>
+            <Button variant="outline" onClick={() => { setFilterDate(''); setFilterPersonId('all'); }}>Limpar</Button>
           </CardContent>
         </Card>
 
