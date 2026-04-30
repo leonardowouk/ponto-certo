@@ -201,10 +201,22 @@ export default function Extras() {
               <Input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
             </div>
             <div className="min-w-[260px]">
-              <label className="text-xs text-muted-foreground">Buscar</label>
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Nome ou final do CPF" />
+              <label className="text-xs text-muted-foreground">Pessoa</label>
+              <Select value={filterPersonId} onValueChange={setFilterPersonId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas as pessoas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as pessoas</SelectItem>
+                  {extraPeople.map(p => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nome_completo} {p.cpf_last4 ? `(***${p.cpf_last4})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Button variant="outline" onClick={() => { setFilterDate(''); setSearch(''); }}>Limpar</Button>
+            <Button variant="outline" onClick={() => { setFilterDate(''); setFilterPersonId('all'); }}>Limpar</Button>
           </CardContent>
         </Card>
 
