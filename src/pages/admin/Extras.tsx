@@ -62,7 +62,8 @@ export default function Extras() {
   const [records, setRecords] = useState<ExtraRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
-  const [search, setSearch] = useState('');
+  const [filterPersonId, setFilterPersonId] = useState<string>('all');
+  const [extraPeople, setExtraPeople] = useState<ExtraPerson[]>([]);
   const [selectedPerson, setSelectedPerson] = useState<ExtraPerson | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
