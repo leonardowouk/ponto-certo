@@ -104,14 +104,9 @@ export default function Extras() {
   useEffect(() => { load(); loadPeople(); }, [selectedCompanyId, filterDate]);
 
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return records;
-    return records.filter((record) => {
-      const name = record.extra_people?.nome_completo?.toLowerCase() || '';
-      const cpf = record.extra_people?.cpf_last4 || '';
-      return name.includes(term) || cpf.includes(term);
-    });
-  }, [records, search]);
+    if (filterPersonId === 'all') return records;
+    return records.filter(r => r.extra_people?.id === filterPersonId);
+  }, [records, filterPersonId]);
 
   const personRecords = useMemo(() => {
     if (!selectedPerson) return [];
