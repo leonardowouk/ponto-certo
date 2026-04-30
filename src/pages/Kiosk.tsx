@@ -309,7 +309,7 @@ export default function KioskPage() {
 
       setEmployee({ id: 'extra', nome: extraData.nomeCompleto });
       setPunchResult({
-        punchType: data.action === 'saida' ? 'saida' : 'entrada',
+        punchType: data.action_label || data.action,
         punchTime: new Date(data.registered_at),
         selfieImage: imageData,
       });
