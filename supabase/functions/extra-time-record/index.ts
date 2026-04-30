@@ -85,6 +85,7 @@ serve(async (req) => {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
 
+    // Upsert person
     const { data: existingPerson } = await supabase
       .from('extra_people')
       .select('id, nome_completo')
@@ -108,6 +109,7 @@ serve(async (req) => {
       await supabase.from('extra_people').update({ nome_completo: nomeCompleto, cpf_last4: cpfLast4 }).eq('id', personId);
     }
 
+    // Upload selfie
     const imagePath = `${companyId}/${personId}/${dateStr}/${now.getTime()}.jpg`;
     const { error: uploadError } = await supabase.storage
       .from('extra_fotos')
@@ -121,10 +123,11 @@ serve(async (req) => {
     const photoUrl = `extra_fotos/${imagePath}`;
     await supabase.from('extra_people').update({ foto_url: photoUrl }).eq('id', personId);
 
+    // Cooldown: check last punch within 3 minutes
     const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     const { data: recentRecord } = await supabase
       .from('extra_time_records')
-      .select('id, entrada_at, saida_at')
+      .select('id')
       .eq('extra_person_id', personId)
       .gte('updated_at', threeMinutesAgo)
       .order('updated_at', { ascending: false })
@@ -135,30 +138,64 @@ serve(async (req) => {
       return json({ success: false, message: 'Aguarde pelo menos 3 minutos entre registros.' });
     }
 
+    // Find today's open record for this person (one that is not fully completed)
     const { data: openRecord } = await supabase
       .from('extra_time_records')
-      .select('id, entrada_at')
+      .select('id, entrada_at, saida_intervalo_at, retorno_intervalo_at, saida_at')
       .eq('company_id', companyId)
       .eq('extra_person_id', personId)
+      .eq('record_date', dateStr)
       .is('saida_at', null)
       .order('entrada_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (openRecord) {
+      // Determine which field to fill next
+      let updateFields: Record<string, unknown> = {};
+      let action = '';
+
+      if (!openRecord.saida_intervalo_at) {
+        updateFields = { saida_intervalo_at: now.toISOString(), saida_intervalo_foto_url: photoUrl };
+        action = 'saida_intervalo';
+      } else if (!openRecord.retorno_intervalo_at) {
+        updateFields = { retorno_intervalo_at: now.toISOString(), retorno_intervalo_foto_url: photoUrl };
+        action = 'retorno_intervalo';
+      } else {
+        // Final exit
+        updateFields = { saida_at: now.toISOString(), saida_foto_url: photoUrl };
+        action = 'saida';
+      }
+
       const { data: updated, error: updateError } = await supabase
         .from('extra_time_records')
-        .update({ saida_at: now.toISOString(), saida_foto_url: photoUrl })
+        .update(updateFields)
         .eq('id', openRecord.id)
-        .select('id, entrada_at, saida_at, total_minutes')
+        .select('id, entrada_at, saida_intervalo_at, retorno_intervalo_at, saida_at, total_minutes')
         .maybeSingle();
+
       if (updateError) {
-        console.error('[extra-time-record] Exit update error:', updateError);
-        return json({ success: false, message: 'Erro ao registrar saída.' }, 500);
+        console.error('[extra-time-record] Update error:', updateError);
+        return json({ success: false, message: 'Erro ao registrar batida.' }, 500);
       }
-      return json({ success: true, action: 'saida', registered_at: now.toISOString(), person_name: nomeCompleto, record: updated });
+
+      const actionLabels: Record<string, string> = {
+        saida_intervalo: 'Saída para intervalo',
+        retorno_intervalo: 'Retorno do intervalo',
+        saida: 'Saída final',
+      };
+
+      return json({
+        success: true,
+        action,
+        action_label: actionLabels[action],
+        registered_at: now.toISOString(),
+        person_name: nomeCompleto,
+        record: updated,
+      });
     }
 
+    // No open record today — create new entry (entrada)
     const { data: createdRecord, error: createRecordError } = await supabase
       .from('extra_time_records')
       .insert({
@@ -168,7 +205,7 @@ serve(async (req) => {
         entrada_at: now.toISOString(),
         entrada_foto_url: photoUrl,
       })
-      .select('id, entrada_at, saida_at, total_minutes')
+      .select('id, entrada_at, saida_intervalo_at, retorno_intervalo_at, saida_at, total_minutes')
       .maybeSingle();
 
     if (createRecordError) {
@@ -176,7 +213,14 @@ serve(async (req) => {
       return json({ success: false, message: 'Erro ao registrar entrada.' }, 500);
     }
 
-    return json({ success: true, action: 'entrada', registered_at: now.toISOString(), person_name: nomeCompleto, record: createdRecord });
+    return json({
+      success: true,
+      action: 'entrada',
+      action_label: 'Entrada',
+      registered_at: now.toISOString(),
+      person_name: nomeCompleto,
+      record: createdRecord,
+    });
   } catch (error) {
     console.error('[extra-time-record] Error:', error);
     return json({ success: false, message: 'Erro interno do servidor.' }, 500);
