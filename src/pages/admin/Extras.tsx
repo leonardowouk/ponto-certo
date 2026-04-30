@@ -90,7 +90,18 @@ export default function Extras() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [selectedCompanyId, filterDate]);
+  // Load extra people list
+  const loadPeople = async () => {
+    if (!selectedCompanyId) return;
+    const { data } = await (supabase as any)
+      .from('extra_people')
+      .select('id, nome_completo, cpf_last4, foto_url')
+      .eq('company_id', selectedCompanyId)
+      .order('nome_completo');
+    setExtraPeople((data || []) as ExtraPerson[]);
+  };
+
+  useEffect(() => { load(); loadPeople(); }, [selectedCompanyId, filterDate]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
