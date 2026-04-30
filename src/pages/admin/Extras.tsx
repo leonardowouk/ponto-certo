@@ -22,10 +22,14 @@ type ExtraRecord = {
   id: string;
   record_date: string;
   entrada_at: string;
+  saida_intervalo_at: string | null;
+  retorno_intervalo_at: string | null;
   saida_at: string | null;
   total_minutes: number | null;
   entrada_foto_url: string | null;
   saida_foto_url: string | null;
+  saida_intervalo_foto_url: string | null;
+  retorno_intervalo_foto_url: string | null;
   comprovante_pagamento_url: string | null;
   observacao_admin: string | null;
   extra_people?: ExtraPerson;
@@ -160,6 +164,14 @@ export default function Extras() {
     }
   };
 
+  /** Determines which step is the "next" punch for a record */
+  function getRecordStatus(record: ExtraRecord) {
+    if (!record.saida_intervalo_at) return 'Aguardando saída intervalo';
+    if (!record.retorno_intervalo_at) return 'Aguardando retorno intervalo';
+    if (!record.saida_at) return 'Aguardando saída final';
+    return 'Completo';
+  }
+
   return (
     <AdminLayout currentPage="extras">
       <div className="space-y-4">
@@ -206,9 +218,11 @@ export default function Extras() {
                     <TableHead>Pessoa</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Entrada</TableHead>
-                    <TableHead>Saída</TableHead>
+                    <TableHead>Saída Int.</TableHead>
+                    <TableHead>Retorno Int.</TableHead>
+                    <TableHead>Saída Final</TableHead>
                     <TableHead>Total</TableHead>
-                    <TableHead>Fotos</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Comprovante</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -222,13 +236,14 @@ export default function Extras() {
                       </TableCell>
                       <TableCell>{formatDate(record.record_date)}</TableCell>
                       <TableCell>{formatTime(record.entrada_at)}</TableCell>
+                      <TableCell>{formatTime(record.saida_intervalo_at)}</TableCell>
+                      <TableCell>{formatTime(record.retorno_intervalo_at)}</TableCell>
                       <TableCell>{formatTime(record.saida_at)}</TableCell>
-                      <TableCell>{formatMinutes(record.total_minutes)}</TableCell>
+                      <TableCell className="font-mono">{formatMinutes(record.total_minutes)}</TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          {signedUrls[`${record.id}:entrada`] && <a className="text-primary text-xs underline" href={signedUrls[`${record.id}:entrada`]} target="_blank" rel="noreferrer">Entrada</a>}
-                          {signedUrls[`${record.id}:saida`] && <a className="text-primary text-xs underline" href={signedUrls[`${record.id}:saida`]} target="_blank" rel="noreferrer">Saída</a>}
-                        </div>
+                        <Badge variant={record.saida_at ? 'default' : 'secondary'} className="text-xs whitespace-nowrap">
+                          {getRecordStatus(record)}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         {signedUrls[`${record.id}:comprovante`] ? (
@@ -277,7 +292,9 @@ export default function Extras() {
                   <TableRow>
                     <TableHead>Data</TableHead>
                     <TableHead>Entrada</TableHead>
-                    <TableHead>Saída</TableHead>
+                    <TableHead>Saída Int.</TableHead>
+                    <TableHead>Retorno Int.</TableHead>
+                    <TableHead>Saída Final</TableHead>
                     <TableHead>Total</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -286,8 +303,10 @@ export default function Extras() {
                     <TableRow key={record.id}>
                       <TableCell>{formatDate(record.record_date)}</TableCell>
                       <TableCell>{formatTime(record.entrada_at)}</TableCell>
+                      <TableCell>{formatTime(record.saida_intervalo_at)}</TableCell>
+                      <TableCell>{formatTime(record.retorno_intervalo_at)}</TableCell>
                       <TableCell>{formatTime(record.saida_at)}</TableCell>
-                      <TableCell>{formatMinutes(record.total_minutes)}</TableCell>
+                      <TableCell className="font-mono">{formatMinutes(record.total_minutes)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
