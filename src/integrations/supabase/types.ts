@@ -723,8 +723,12 @@ export type Database = {
           id: string
           observacao_admin: string | null
           record_date: string
+          retorno_intervalo_at: string | null
+          retorno_intervalo_foto_url: string | null
           saida_at: string | null
           saida_foto_url: string | null
+          saida_intervalo_at: string | null
+          saida_intervalo_foto_url: string | null
           total_minutes: number | null
           updated_at: string
           updated_by: string | null
@@ -740,8 +744,12 @@ export type Database = {
           id?: string
           observacao_admin?: string | null
           record_date?: string
+          retorno_intervalo_at?: string | null
+          retorno_intervalo_foto_url?: string | null
           saida_at?: string | null
           saida_foto_url?: string | null
+          saida_intervalo_at?: string | null
+          saida_intervalo_foto_url?: string | null
           total_minutes?: number | null
           updated_at?: string
           updated_by?: string | null
@@ -757,8 +765,12 @@ export type Database = {
           id?: string
           observacao_admin?: string | null
           record_date?: string
+          retorno_intervalo_at?: string | null
+          retorno_intervalo_foto_url?: string | null
           saida_at?: string | null
           saida_foto_url?: string | null
+          saida_intervalo_at?: string | null
+          saida_intervalo_foto_url?: string | null
           total_minutes?: number | null
           updated_at?: string
           updated_by?: string | null
