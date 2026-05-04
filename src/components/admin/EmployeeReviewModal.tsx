@@ -710,6 +710,15 @@ export function EmployeeReviewModal({
                               <Button
                                 size="sm"
                                 variant="outline"
+                                className="h-7 text-xs px-2 text-blue-700 border-blue-300 hover:bg-blue-50"
+                                onClick={() => handleMarkMissingDay(d, 'folga_compensada')}
+                                title="Marca como folga e debita as horas do banco de horas"
+                              >
+                                Folga (banco)
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 className="h-7 text-xs px-2"
                                 onClick={() => d.isMissing ? startEditMissing(d) : startEdit(d)}
                               >
