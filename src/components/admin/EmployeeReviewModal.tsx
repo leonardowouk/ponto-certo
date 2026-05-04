@@ -225,7 +225,48 @@ export function EmployeeReviewModal({
 
     allDaysList.sort((a, b) => a.work_date.localeCompare(b.work_date));
     setDays(allDaysList);
+
+    // Load pending corrections for the month
+    const { data: corrs } = await supabase
+      .from('punch_corrections')
+      .select('id, work_date, punch_type, requested_time, reason')
+      .eq('employee_id', employeeId)
+      .eq('status', 'pendente')
+      .gte('work_date', startDate)
+      .lte('work_date', endDate);
+    const byDate: Record<string, Array<{ id: string; punch_type: string; requested_time: string; reason: string }>> = {};
+    (corrs || []).forEach(c => {
+      if (!byDate[c.work_date]) byDate[c.work_date] = [];
+      byDate[c.work_date].push(c as any);
+    });
+    setPendingCorrections(byDate);
     setLoading(false);
+  };
+
+  const handleApproveCorrection = async (correctionId: string) => {
+    setActioningCorrection(correctionId);
+    try {
+      await approveCorrection(correctionId);
+      toast({ title: 'Correção aprovada', description: 'Batida criada e dia recalculado.' });
+      loadDays();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+    setActioningCorrection(null);
+  };
+
+  const handleRejectCorrection = async (correctionId: string) => {
+    const motivo = window.prompt('Motivo da rejeição:');
+    if (!motivo?.trim()) return;
+    setActioningCorrection(correctionId);
+    try {
+      await rejectCorrection(correctionId, motivo.trim());
+      toast({ title: 'Correção rejeitada' });
+      loadDays();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+    setActioningCorrection(null);
   };
 
   const totals = days.reduce(
