@@ -54,6 +54,7 @@ export default function HourBankPage() {
   const [balances, setBalances] = useState<HourBankBalance[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modalMode, setModalMode] = useState<'compensacao' | 'manual' | null>(null);
   const { toast } = useToast();
   const { selectedCompanyId } = useCompany();
 
