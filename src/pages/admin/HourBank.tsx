@@ -21,8 +21,9 @@ import {
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wallet, TrendingUp, TrendingDown } from 'lucide-react';
+import { Loader2, Wallet, TrendingUp, TrendingDown, CalendarMinus, Plus } from 'lucide-react';
 import { formatMinutesToHours } from '@/lib/hash';
+import { HourBankEntryModal } from '@/components/admin/HourBankEntryModal';
 
 interface Employee {
   id: string;
