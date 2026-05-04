@@ -335,6 +335,17 @@ export default function HourBankPage() {
           </CardContent>
         </Card>
       </div>
+
+      <HourBankEntryModal
+        open={modalMode !== null}
+        mode={modalMode ?? 'manual'}
+        employees={employees}
+        onClose={() => setModalMode(null)}
+        onSaved={() => {
+          loadBalances();
+          loadLedger();
+        }}
+      />
     </AdminLayout>
   );
 }
