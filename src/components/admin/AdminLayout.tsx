@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/select';
 import { 
   Clock, Users, CalendarDays, Wallet, LayoutDashboard,
-  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText, ListChecks, UserPlus
+  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText, ListChecks, UserPlus, ClipboardCheck
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { CompanyProvider, useCompany } from '@/contexts/CompanyContext';
 
 interface AdminLayoutProps {
@@ -26,6 +27,22 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { companies, selectedCompanyId, setSelectedCompanyId, isSuperAdmin } = useCompany();
+  const [pendingCorrections, setPendingCorrections] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      let q = supabase
+        .from('punch_corrections')
+        .select('id, employees!inner(company_id)', { count: 'exact', head: true })
+        .eq('status', 'pendente');
+      if (selectedCompanyId) q = q.eq('employees.company_id', selectedCompanyId);
+      const { count } = await q;
+      if (active) setPendingCorrections(count || 0);
+    };
+    load();
+    return () => { active = false; };
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -69,6 +86,7 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
     { id: 'employees', label: 'Colaboradores', icon: Users, href: '/admin/employees' },
     { id: 'sectors', label: 'Setores', icon: Building2, href: '/admin/sectors' },
     { id: 'timesheet', label: 'Espelho de Ponto', icon: CalendarDays, href: '/admin/timesheet' },
+    { id: 'corrections', label: 'Correções de Ponto', icon: ClipboardCheck, href: '/admin/corrections', badge: pendingCorrections },
     { id: 'extras', label: 'Extras', icon: UserPlus, href: '/admin/extras' },
     { id: 'hourbank', label: 'Banco de Horas', icon: Wallet, href: '/admin/hourbank' },
     { id: 'closing', label: 'Fechamento Mensal', icon: FileCheck, href: '/admin/closing' },
@@ -104,7 +122,12 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
                     className="w-full"
                   >
                     <item.icon className="w-4 h-4" />
-                    <span>{item.label}</span>
+                    <span className="flex-1">{item.label}</span>
+                    {'badge' in item && (item as any).badge > 0 && (
+                      <Badge variant="destructive" className="h-5 px-1.5 text-xs">
+                        {(item as any).badge}
+                      </Badge>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

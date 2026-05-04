@@ -1,67 +1,48 @@
-## Contexto rápido
+# Aprovação de Correções de Ponto (Admin)
 
-Hoje o **banco de horas** já existe (`hour_bank_ledger` + `hour_bank_balance`):
-- Lançamentos `automatico` são gerados a cada dia trabalhado (saldo = trabalhado − esperado).
-- A enum `source` já suporta: `automatico`, `ajuste_manual`, `abono`, `atestado`, `compensacao`.
-- Falta apenas **interface** para criar lançamentos manuais e amarrar com o fechamento mensal.
+Hoje a tabela `punch_corrections` recebe solicitações dos colaboradores via portal, mas **não há nenhuma tela admin** para visualizar/aprovar/rejeitar. Vamos criar essa tela e integrar com o fechamento mensal.
 
-No **fechamento mensal**, no modal de revisão de cada colaborador, hoje existem 2 botões para dias sem ponto: **Falta** e **Abono**. Vamos adicionar um terceiro: **Folga compensada**.
+## 1. Nova página: `/admin/corrections`
 
----
+Arquivo: `src/pages/admin/Corrections.tsx`
 
-## O que será feito
+- Listar todas as solicitações de `punch_corrections` da empresa selecionada (join com `employees` para nome/setor).
+- Abas por status: **Pendentes** (default) | Aprovadas | Rejeitadas | Todas.
+- Cada linha mostra: colaborador, data, tipo de batida, horário solicitado, motivo, anexo (se houver), data da solicitação.
+- Ações em pendentes: **Aprovar** / **Rejeitar** (com campo opcional de "observação do revisor").
+- Ao **aprovar**:
+  - Inserir uma `time_punches` manual com `employee_id`, `punch_type`, `punched_at = work_date + requested_time`, `unidade = 'manual'`, `status = 'ok'`.
+  - Atualizar `punch_corrections`: `status='aprovado'`, `reviewed_by=auth.uid()`, `reviewed_at=now()`, `review_notes`.
+  - Recalcular o dia: re-rodar a mesma lógica que `EmployeeReviewModal` usa para atualizar `timesheets_daily` daquele dia (extrair em util `recalculateDailyTimesheet(employee_id, work_date)`).
+- Ao **rejeitar**: apenas atualiza status + notas (sem criar batida).
 
-### 1. Tela Banco de Horas — dois botões de lançamento manual
+## 2. Sidebar e rota
 
-Em `src/pages/admin/HourBank.tsx`, no card "Extrato de Lançamentos", adicionar dois botões no header:
+- Adicionar item **"Correções de Ponto"** no `AdminLayout.tsx` (ícone `MessageSquareWarning` ou `ClipboardCheck`), entre "Espelho de Ponto" e "Extras".
+- Mostrar **badge com contador** de pendentes ao lado do label (query rápida `count` filtrada por company + status='pendente').
+- Registrar rota em `src/App.tsx`.
 
-- **"Lançar folga"** → modal com:
-  - Colaborador (Select)
-  - Data da folga (DatePicker)
-  - Descrição (opcional, ex: "Folga compensatória")
-  - Ao salvar, busca a jornada esperada do colaborador para o dia da semana (via `work_schedules` → `sector_schedules` → padrão 8h, mesma hierarquia já documentada) e debita esses minutos como `source = 'compensacao'`, `approval_status = 'aprovado'`.
+## 3. Integração no Fechamento Mensal
 
-- **"Novo ajuste manual"** → modal com:
-  - Colaborador, Data, Tipo (`ajuste_manual` | `abono` | `atestado` | `compensacao`), Minutos (input livre, aceita negativo), Descrição.
-  - Insere direto no ledger como aprovado.
+No `EmployeeReviewModal.tsx`, na lista de dias **sem ponto** (`missing-${dateStr}`):
 
-Após qualquer inserção: recalcular `hour_bank_balance` do colaborador (somar todos os lançamentos `aprovado`) e recarregar listas.
+- Ao montar a lista, buscar `punch_corrections` do colaborador no mês (status='pendente').
+- Se existir uma solicitação pendente para aquele dia, exibir um **alerta inline amarelo** no card do dia: *"Solicitação de correção pendente: [tipo] às [hora] — [motivo]"* com botões **Aprovar** / **Rejeitar** (mesma lógica da página de Corrections).
+- Aprovar transforma o "dia sem ponto" em um dia com batida e remove o alerta.
 
-### 2. Fechamento Mensal — opção "Folga compensada"
+## 4. Helper compartilhado
 
-No `EmployeeReviewModal.tsx`, junto dos botões **Falta** / **Abono** dos dias sem ponto, adicionar **Folga compensada**:
+Criar `src/lib/punchCorrections.ts` com:
 
-- Marca o dia em `timesheets_daily` com `status = 'abono'` e `notes = 'Folga compensada do banco de horas'` (ou criar um novo valor `folga_compensada` no enum `timesheet_status` — ver pergunta abaixo).
-- Cria um lançamento em `hour_bank_ledger`: `source = 'compensacao'`, `minutes = -expected_minutes do dia`, `ref_date = data do dia`, descrição automática.
-- Recalcula `hour_bank_balance`.
+- `approveCorrection(correctionId, reviewNotes?)` — cria `time_punches`, atualiza `punch_corrections`, recalcula `timesheets_daily` do dia.
+- `rejectCorrection(correctionId, reviewNotes)` — apenas atualiza status.
+- `recalculateDailyTimesheet(employeeId, workDate)` — re-agrega batidas do dia (entrada/saída/intervalos), grava `worked_minutes`, `balance_minutes`, etc. Pode ser uma versão simplificada chamando a mesma lógica já presente em outros pontos do código.
 
-O dia deixa de aparecer como "pendente" para liberar a conferência do mês.
+## 5. Migração
 
-### 3. Recálculo de saldo (helper compartilhado)
-
-Criar função utilitária `recalculateHourBankBalance(employeeId)` em `src/lib/hourBank.ts` reutilizada pelos dois pontos acima — consulta o ledger aprovado e dá upsert no balance.
-
----
-
-## Detalhes técnicos
-
-**Arquivos alterados/criados:**
-- `src/pages/admin/HourBank.tsx` — botões + 2 modais
-- `src/components/admin/HourBankEntryModal.tsx` (novo) — modal de ajuste manual
-- `src/components/admin/CompensationDayModal.tsx` (novo) — modal de folga rápida (com cálculo automático de minutos pela jornada)
-- `src/components/admin/EmployeeReviewModal.tsx` — botão "Folga compensada" nos dias sem ponto
-- `src/lib/hourBank.ts` (novo) — helper `recalculateHourBankBalance` e helper `getExpectedMinutesForDate`
-
-**Banco de dados:** nenhuma migração obrigatória. A enum `source` já contempla todos os tipos. Os lançamentos serão `approval_status = 'aprovado'` por padrão.
-
-**RLS:** já permite Admin/RH gerenciar `hour_bank_ledger` e fazer upsert em `hour_bank_balance` indiretamente via lógica do app — porém a tabela `hour_bank_balance` hoje tem RLS apenas de SELECT. Será necessária **uma migração** liberando INSERT/UPDATE para Admin/RH (`is_admin_or_rh(auth.uid())`), senão o recálculo falha.
-
-**Multi-tenancy:** todos os Selects de colaborador continuam filtrando por `selectedCompanyId` via `CompanyContext`.
+Nenhuma. RLS já permite Admin/RH ler e atualizar `punch_corrections`, e inserir em `time_punches`.
 
 ---
 
-## Pergunta rápida antes de implementar
-
-Para "Folga compensada" no fechamento mensal, prefere que o dia fique marcado como **`abono`** (status já existente, com nota explicativa) ou criar um novo valor **`folga_compensada`** no enum `timesheet_status` (mais explícito no espelho de ponto, mas exige migração e ajustes nas telas que renderizam status)?
-
-Se preferir o caminho mais simples (`abono` + nota), implemento direto. Caso contrário, me avise e adiciono a migração do enum.
+**Decisão pendente** (default se você não responder):
+- *Aprovação automática como o banco de horas?* → **Não** — correções precisam de revisão humana porque criam batidas físicas no espelho. Default = **fluxo manual com aprovar/rejeitar**.

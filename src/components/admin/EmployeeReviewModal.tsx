@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment as FragmentWithKey } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, eachDayOfInterval, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CheckCircle, Loader2, Pencil, Save, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { recalculateHourBankBalance, getExpectedMinutesForDate } from '@/lib/hourBank';
+import { approveCorrection, rejectCorrection } from '@/lib/punchCorrections';
 
 interface Punch {
   id: string;
@@ -82,6 +83,8 @@ export function EmployeeReviewModal({
   const [editingDay, setEditingDay] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ entrada: string; saidaInt: string; retornoInt: string; saida: string; justificativa: string }>({ entrada: '', saidaInt: '', retornoInt: '', saida: '', justificativa: '' });
   const [savingMissing, setSavingMissing] = useState<string | null>(null);
+  const [pendingCorrections, setPendingCorrections] = useState<Record<string, Array<{ id: string; punch_type: string; requested_time: string; reason: string }>>>({});
+  const [actioningCorrection, setActioningCorrection] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -222,7 +225,48 @@ export function EmployeeReviewModal({
 
     allDaysList.sort((a, b) => a.work_date.localeCompare(b.work_date));
     setDays(allDaysList);
+
+    // Load pending corrections for the month
+    const { data: corrs } = await supabase
+      .from('punch_corrections')
+      .select('id, work_date, punch_type, requested_time, reason')
+      .eq('employee_id', employeeId)
+      .eq('status', 'pendente')
+      .gte('work_date', startDate)
+      .lte('work_date', endDate);
+    const byDate: Record<string, Array<{ id: string; punch_type: string; requested_time: string; reason: string }>> = {};
+    (corrs || []).forEach(c => {
+      if (!byDate[c.work_date]) byDate[c.work_date] = [];
+      byDate[c.work_date].push(c as any);
+    });
+    setPendingCorrections(byDate);
     setLoading(false);
+  };
+
+  const handleApproveCorrection = async (correctionId: string) => {
+    setActioningCorrection(correctionId);
+    try {
+      await approveCorrection(correctionId);
+      toast({ title: 'Correção aprovada', description: 'Batida criada e dia recalculado.' });
+      loadDays();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+    setActioningCorrection(null);
+  };
+
+  const handleRejectCorrection = async (correctionId: string) => {
+    const motivo = window.prompt('Motivo da rejeição:');
+    if (!motivo?.trim()) return;
+    setActioningCorrection(correctionId);
+    try {
+      await rejectCorrection(correctionId, motivo.trim());
+      toast({ title: 'Correção rejeitada' });
+      loadDays();
+    } catch (e: any) {
+      toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    }
+    setActioningCorrection(null);
   };
 
   const totals = days.reduce(
@@ -626,9 +670,11 @@ export function EmployeeReviewModal({
                   const intFim = d.punches.find(p => p.punch_type === 'intervalo_fim');
                   const saida = d.punches.find(p => p.punch_type === 'saida');
                   const showResolution = needsResolution(d) && !isReadOnly;
+                  const dayCorrections = pendingCorrections[d.work_date] || [];
 
                   return (
-                    <TableRow key={d.id} className={d.isMissing ? 'bg-red-50' : ''}>
+                    <FragmentWithKey key={d.id}>
+                    <TableRow className={d.isMissing ? 'bg-red-50' : ''}>
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(d.work_date + 'T12:00:00'), "EEE dd/MM", { locale: ptBR })}
                       </TableCell>
@@ -734,6 +780,36 @@ export function EmployeeReviewModal({
                         ) : null}
                       </TableCell>
                     </TableRow>
+                    {dayCorrections.length > 0 && !isReadOnly && (
+                      <TableRow key={`${d.id}-corr`} className="bg-amber-50">
+                        <TableCell colSpan={10} className="py-2">
+                          {dayCorrections.map(c => (
+                            <div key={c.id} className="flex items-center gap-2 text-xs flex-wrap">
+                              <Badge variant="outline" className="border-amber-400 text-amber-800">
+                                Correção pendente
+                              </Badge>
+                              <span className="font-medium">
+                                {c.punch_type} → {c.requested_time?.slice(0,5)}
+                              </span>
+                              <span className="text-muted-foreground italic flex-1 truncate">"{c.reason}"</span>
+                              {actioningCorrection === c.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Button size="sm" className="h-7 text-xs" onClick={() => handleApproveCorrection(c.id)}>
+                                    Aprovar
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleRejectCorrection(c.id)}>
+                                    Rejeitar
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </FragmentWithKey>
                   );
                 })}
               </TableBody>
