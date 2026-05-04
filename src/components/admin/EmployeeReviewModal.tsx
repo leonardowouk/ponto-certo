@@ -239,11 +239,25 @@ export function EmployeeReviewModal({
     d.isMissing || d.status === 'pendente' || d.status === 'revisao' || d.status === null
   );
 
-  const handleMarkMissingDay = async (day: DayWithPunches, newStatus: 'falta' | 'abono') => {
+  const handleMarkMissingDay = async (
+    day: DayWithPunches,
+    newStatus: 'falta' | 'abono' | 'folga_compensada'
+  ) => {
     setSavingMissing(day.work_date);
 
+    // For "folga_compensada" we mark the day as 'abono' in timesheets but
+    // also debit the expected minutes from the hour bank.
+    const tsStatus: 'falta' | 'abono' = newStatus === 'folga_compensada' ? 'abono' : newStatus;
+    const noteMap: Record<typeof newStatus, string> = {
+      falta: 'Falta registrada no fechamento',
+      abono: 'Abono de falta',
+      folga_compensada: 'Folga compensada do banco de horas',
+    };
+    const notes = noteMap[newStatus];
+
+    let dbError: { message: string } | null = null;
+
     if (day.isMissing) {
-      // Create a new timesheet_daily record
       const { error } = await supabase
         .from('timesheets_daily')
         .insert({
@@ -253,33 +267,54 @@ export function EmployeeReviewModal({
           expected_minutes: 0,
           balance_minutes: 0,
           break_minutes: 0,
-          status: newStatus as any,
-          notes: newStatus === 'abono' ? 'Abono de falta' : 'Falta registrada no fechamento',
+          status: tsStatus as any,
+          notes,
         });
-
-      if (error) {
-        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
-      } else {
-        toast({ title: newStatus === 'abono' ? 'Abono registrado' : 'Falta registrada' });
-        loadDays();
-      }
+      dbError = error;
     } else {
-      // Update existing timesheet
       const { error } = await supabase
         .from('timesheets_daily')
-        .update({
-          status: newStatus as any,
-          notes: newStatus === 'abono' ? 'Abono de falta' : 'Falta registrada no fechamento',
-        })
+        .update({ status: tsStatus as any, notes })
         .eq('id', day.id);
+      dbError = error;
+    }
 
-      if (error) {
-        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    if (dbError) {
+      toast({ title: 'Erro', description: dbError.message, variant: 'destructive' });
+      setSavingMissing(null);
+      return;
+    }
+
+    // For folga compensada, debit hour bank
+    if (newStatus === 'folga_compensada') {
+      const expected = await getExpectedMinutesForDate(employeeId, day.work_date);
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session?.session?.user?.id;
+      const { error: ledgerErr } = await supabase.from('hour_bank_ledger').insert({
+        employee_id: employeeId,
+        ref_date: day.work_date,
+        minutes: -Math.abs(expected),
+        source: 'compensacao',
+        description: 'Folga compensada via fechamento mensal',
+        approval_status: 'aprovado',
+        approved_by: userId,
+        approved_at: new Date().toISOString(),
+        created_by: userId,
+      });
+      if (ledgerErr) {
+        toast({ title: 'Folga registrada, mas erro no banco de horas', description: ledgerErr.message, variant: 'destructive' });
       } else {
-        toast({ title: newStatus === 'abono' ? 'Abono registrado' : 'Falta registrada' });
-        loadDays();
+        await recalculateHourBankBalance(employeeId);
       }
     }
+
+    const titleMap: Record<typeof newStatus, string> = {
+      falta: 'Falta registrada',
+      abono: 'Abono registrado',
+      folga_compensada: 'Folga compensada do banco de horas',
+    };
+    toast({ title: titleMap[newStatus] });
+    loadDays();
     setSavingMissing(null);
   };
 
