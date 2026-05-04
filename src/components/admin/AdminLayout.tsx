@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/select';
 import { 
   Clock, Users, CalendarDays, Wallet, LayoutDashboard,
-  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText, ListChecks, UserPlus
+  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText, ListChecks, UserPlus, ClipboardCheck
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { CompanyProvider, useCompany } from '@/contexts/CompanyContext';
 
 interface AdminLayoutProps {
