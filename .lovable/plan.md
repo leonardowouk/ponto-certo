@@ -1,58 +1,67 @@
-Encontrei a causa provável: uma migração recente revogou `EXECUTE` das funções centrais de permissão (`get_user_company_ids`, `is_admin_or_rh`, `has_role`, `is_super_admin`) para usuários autenticados. Essas funções são usadas diretamente pelas políticas de acesso de empresas, usuários e várias telas administrativas. Resultado: as consultas do painel passam a falhar por permissão e parecem “sumir” empresas/acessos.
+## Contexto rápido
 
-Plano de correção:
+Hoje o **banco de horas** já existe (`hour_bank_ledger` + `hour_bank_balance`):
+- Lançamentos `automatico` são gerados a cada dia trabalhado (saldo = trabalhado − esperado).
+- A enum `source` já suporta: `automatico`, `ajuste_manual`, `abono`, `atestado`, `compensacao`.
+- Falta apenas **interface** para criar lançamentos manuais e amarrar com o fechamento mensal.
 
-1. Restaurar permissões das funções de autorização
-   - Criar uma nova migração para conceder novamente `EXECUTE` aos usuários autenticados nas funções usadas pelas políticas RLS:
-     - `public.get_user_company_ids(uuid)`
-     - `public.is_admin_or_rh(uuid)`
-     - `public.has_role(uuid, public.app_role)`
-     - `public.is_super_admin(uuid)`
-   - Manter as funções como `SECURITY DEFINER`, com `search_path` controlado, para evitar recursão e manter segurança.
-   - Não liberar essas funções para `anon`, apenas `authenticated` e os papéis internos necessários.
+No **fechamento mensal**, no modal de revisão de cada colaborador, hoje existem 2 botões para dias sem ponto: **Falta** e **Abono**. Vamos adicionar um terceiro: **Folga compensada**.
 
-2. Corrigir a migração problemática no repositório
-   - Ajustar a migração `20260427175521...` no código para não deixar o projeto em estado quebrado caso seja reaplicado em outro ambiente.
-   - Substituir a revogação ampla por permissões explícitas seguras.
+---
 
-3. Validar empresas e acessos administrativos
-   - Conferir se as empresas continuam no banco. Já confirmei que existem 2 empresas.
-   - Conferir se `user_roles` e `user_company_access` continuam no banco. Já confirmei que existem dados.
-   - Validar que seu usuário ainda tem `super_admin`/`admin` e vínculo com empresa.
+## O que será feito
 
-4. Revisar telas afetadas
-   - Confirmar que `CompanyContext` volta a carregar empresas.
-   - Confirmar que a área de Usuários volta a exibir papéis e vínculos por empresa.
-   - Verificar se não há erro de permissão nas telas administrativas que dependem de `get_user_company_ids()`.
+### 1. Tela Banco de Horas — dois botões de lançamento manual
 
-5. Rodar verificação de segurança novamente
-   - Executar linter/scan após a correção.
-   - Garantir que a correção não reabre acesso público indevido.
+Em `src/pages/admin/HourBank.tsx`, no card "Extrato de Lançamentos", adicionar dois botões no header:
 
-Detalhe técnico:
+- **"Lançar folga"** → modal com:
+  - Colaborador (Select)
+  - Data da folga (DatePicker)
+  - Descrição (opcional, ex: "Folga compensatória")
+  - Ao salvar, busca a jornada esperada do colaborador para o dia da semana (via `work_schedules` → `sector_schedules` → padrão 8h, mesma hierarquia já documentada) e debita esses minutos como `source = 'compensacao'`, `approval_status = 'aprovado'`.
 
-A migração problemática contém:
+- **"Novo ajuste manual"** → modal com:
+  - Colaborador, Data, Tipo (`ajuste_manual` | `abono` | `atestado` | `compensacao`), Minutos (input livre, aceita negativo), Descrição.
+  - Insere direto no ledger como aprovado.
 
-```sql
-REVOKE EXECUTE ON FUNCTION public.is_super_admin(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.get_user_company_ids(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.is_admin_or_rh(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC, anon, authenticated;
-```
+Após qualquer inserção: recalcular `hour_bank_balance` do colaborador (somar todos os lançamentos `aprovado`) e recarregar listas.
 
-Isso quebra políticas como:
+### 2. Fechamento Mensal — opção "Folga compensada"
 
-```sql
-USING (id IN (SELECT get_user_company_ids(auth.uid())))
-```
+No `EmployeeReviewModal.tsx`, junto dos botões **Falta** / **Abono** dos dias sem ponto, adicionar **Folga compensada**:
 
-Correção prevista:
+- Marca o dia em `timesheets_daily` com `status = 'abono'` e `notes = 'Folga compensada do banco de horas'` (ou criar um novo valor `folga_compensada` no enum `timesheet_status` — ver pergunta abaixo).
+- Cria um lançamento em `hour_bank_ledger`: `source = 'compensacao'`, `minutes = -expected_minutes do dia`, `ref_date = data do dia`, descrição automática.
+- Recalcula `hour_bank_balance`.
 
-```sql
-GRANT EXECUTE ON FUNCTION public.is_super_admin(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_user_company_ids(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_admin_or_rh(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
-```
+O dia deixa de aparecer como "pendente" para liberar a conferência do mês.
 
-Também vou manter `set_extra_record_total_minutes()` sem exposição desnecessária ao cliente, porque é função de trigger e não precisa ser chamada pelo painel.
+### 3. Recálculo de saldo (helper compartilhado)
+
+Criar função utilitária `recalculateHourBankBalance(employeeId)` em `src/lib/hourBank.ts` reutilizada pelos dois pontos acima — consulta o ledger aprovado e dá upsert no balance.
+
+---
+
+## Detalhes técnicos
+
+**Arquivos alterados/criados:**
+- `src/pages/admin/HourBank.tsx` — botões + 2 modais
+- `src/components/admin/HourBankEntryModal.tsx` (novo) — modal de ajuste manual
+- `src/components/admin/CompensationDayModal.tsx` (novo) — modal de folga rápida (com cálculo automático de minutos pela jornada)
+- `src/components/admin/EmployeeReviewModal.tsx` — botão "Folga compensada" nos dias sem ponto
+- `src/lib/hourBank.ts` (novo) — helper `recalculateHourBankBalance` e helper `getExpectedMinutesForDate`
+
+**Banco de dados:** nenhuma migração obrigatória. A enum `source` já contempla todos os tipos. Os lançamentos serão `approval_status = 'aprovado'` por padrão.
+
+**RLS:** já permite Admin/RH gerenciar `hour_bank_ledger` e fazer upsert em `hour_bank_balance` indiretamente via lógica do app — porém a tabela `hour_bank_balance` hoje tem RLS apenas de SELECT. Será necessária **uma migração** liberando INSERT/UPDATE para Admin/RH (`is_admin_or_rh(auth.uid())`), senão o recálculo falha.
+
+**Multi-tenancy:** todos os Selects de colaborador continuam filtrando por `selectedCompanyId` via `CompanyContext`.
+
+---
+
+## Pergunta rápida antes de implementar
+
+Para "Folga compensada" no fechamento mensal, prefere que o dia fique marcado como **`abono`** (status já existente, com nota explicativa) ou criar um novo valor **`folga_compensada`** no enum `timesheet_status` (mais explícito no espelho de ponto, mas exige migração e ajustes nas telas que renderizam status)?
+
+Se preferir o caminho mais simples (`abono` + nota), implemento direto. Caso contrário, me avise e adiciono a migração do enum.
