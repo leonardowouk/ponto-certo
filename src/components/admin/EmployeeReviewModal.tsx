@@ -670,8 +670,10 @@ export function EmployeeReviewModal({
                   const intFim = d.punches.find(p => p.punch_type === 'intervalo_fim');
                   const saida = d.punches.find(p => p.punch_type === 'saida');
                   const showResolution = needsResolution(d) && !isReadOnly;
+                  const dayCorrections = pendingCorrections[d.work_date] || [];
 
                   return (
+                    <>
                     <TableRow key={d.id} className={d.isMissing ? 'bg-red-50' : ''}>
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(d.work_date + 'T12:00:00'), "EEE dd/MM", { locale: ptBR })}
@@ -778,6 +780,36 @@ export function EmployeeReviewModal({
                         ) : null}
                       </TableCell>
                     </TableRow>
+                    {dayCorrections.length > 0 && !isReadOnly && (
+                      <TableRow key={`${d.id}-corr`} className="bg-amber-50">
+                        <TableCell colSpan={10} className="py-2">
+                          {dayCorrections.map(c => (
+                            <div key={c.id} className="flex items-center gap-2 text-xs flex-wrap">
+                              <Badge variant="outline" className="border-amber-400 text-amber-800">
+                                Correção pendente
+                              </Badge>
+                              <span className="font-medium">
+                                {c.punch_type} → {c.requested_time?.slice(0,5)}
+                              </span>
+                              <span className="text-muted-foreground italic flex-1 truncate">"{c.reason}"</span>
+                              {actioningCorrection === c.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Button size="sm" className="h-7 text-xs" onClick={() => handleApproveCorrection(c.id)}>
+                                    Aprovar
+                                  </Button>
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleRejectCorrection(c.id)}>
+                                    Rejeitar
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </>
                   );
                 })}
               </TableBody>
