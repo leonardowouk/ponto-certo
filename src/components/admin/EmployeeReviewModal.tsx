@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment as FragmentWithKey } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { format, eachDayOfInterval, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -673,8 +673,8 @@ export function EmployeeReviewModal({
                   const dayCorrections = pendingCorrections[d.work_date] || [];
 
                   return (
-                    <>
-                    <TableRow key={d.id} className={d.isMissing ? 'bg-red-50' : ''}>
+                    <FragmentWithKey key={d.id}>
+                    <TableRow className={d.isMissing ? 'bg-red-50' : ''}>
                       <TableCell className="whitespace-nowrap">
                         {format(new Date(d.work_date + 'T12:00:00'), "EEE dd/MM", { locale: ptBR })}
                       </TableCell>
@@ -809,7 +809,7 @@ export function EmployeeReviewModal({
                         </TableCell>
                       </TableRow>
                     )}
-                    </>
+                    </FragmentWithKey>
                   );
                 })}
               </TableBody>
