@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CheckCircle, Loader2, Pencil, Save, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { recalculateHourBankBalance, getExpectedMinutesForDate } from '@/lib/hourBank';
+import { approveCorrection, rejectCorrection } from '@/lib/punchCorrections';
 
 interface Punch {
   id: string;
@@ -82,6 +83,8 @@ export function EmployeeReviewModal({
   const [editingDay, setEditingDay] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ entrada: string; saidaInt: string; retornoInt: string; saida: string; justificativa: string }>({ entrada: '', saidaInt: '', retornoInt: '', saida: '', justificativa: '' });
   const [savingMissing, setSavingMissing] = useState<string | null>(null);
+  const [pendingCorrections, setPendingCorrections] = useState<Record<string, Array<{ id: string; punch_type: string; requested_time: string; reason: string }>>>({});
+  const [actioningCorrection, setActioningCorrection] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
