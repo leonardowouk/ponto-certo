@@ -122,7 +122,12 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
                     className="w-full"
                   >
                     <item.icon className="w-4 h-4" />
-                    <span>{item.label}</span>
+                    <span className="flex-1">{item.label}</span>
+                    {'badge' in item && (item as any).badge > 0 && (
+                      <Badge variant="destructive" className="h-5 px-1.5 text-xs">
+                        {(item as any).badge}
+                      </Badge>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
