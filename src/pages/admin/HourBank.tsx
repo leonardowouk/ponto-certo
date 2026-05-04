@@ -248,21 +248,31 @@ export default function HourBankPage() {
 
         {/* Ledger */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
             <CardTitle>Extrato de Lançamentos</CardTitle>
-            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Filtrar por colaborador" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os colaboradores</SelectItem>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={emp.id}>
-                    {emp.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button size="sm" variant="outline" onClick={() => setModalMode('compensacao')}>
+                <CalendarMinus className="w-4 h-4 mr-1" />
+                Lançar folga
+              </Button>
+              <Button size="sm" onClick={() => setModalMode('manual')}>
+                <Plus className="w-4 h-4 mr-1" />
+                Novo ajuste manual
+              </Button>
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Filtrar por colaborador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os colaboradores</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
