@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CheckCircle, Loader2, Pencil, Save, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { recalculateHourBankBalance, getExpectedMinutesForDate } from '@/lib/hourBank';
 
 interface Punch {
   id: string;
