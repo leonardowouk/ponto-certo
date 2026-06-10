@@ -196,10 +196,12 @@ export function EmployeeReviewModal({
       const existing = tsMap.get(dateStr);
       if (existing) {
         const worked = existing.worked_minutes || 0;
+        // 'abono' days do not penalize the balance — they neutralize the missing hours
+        const isAbono = existing.status === 'abono';
         allDaysList.push({
           ...existing,
           expected_minutes: canonicalExpected,
-          balance_minutes: worked - canonicalExpected,
+          balance_minutes: isAbono ? 0 : worked - canonicalExpected,
           punches: punchMap.get(dateStr) || [],
           isMissing: false,
         });
