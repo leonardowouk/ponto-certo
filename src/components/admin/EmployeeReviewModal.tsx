@@ -169,6 +169,13 @@ export function EmployeeReviewModal({
     const tsData = tsResult.data || [];
     const punchData = punchResult.data || [];
 
+    // Compute the canonical expected minutes for this employee (schedule-based).
+    // This overrides any stale/zero value previously persisted in timesheets_daily.
+    const canonicalExpected = await getExpectedMinutesForDate(
+      employeeId,
+      format(refMonth, 'yyyy-MM-dd')
+    );
+
     // Group punches by date
     const punchMap = new Map<string, Punch[]>();
     punchData.forEach(p => {
@@ -188,8 +195,11 @@ export function EmployeeReviewModal({
     for (const dateStr of sortedDates) {
       const existing = tsMap.get(dateStr);
       if (existing) {
+        const worked = existing.worked_minutes || 0;
         allDaysList.push({
           ...existing,
+          expected_minutes: canonicalExpected,
+          balance_minutes: worked - canonicalExpected,
           punches: punchMap.get(dateStr) || [],
           isMissing: false,
         });
@@ -201,8 +211,8 @@ export function EmployeeReviewModal({
           first_punch_at: null,
           last_punch_at: null,
           worked_minutes: 0,
-          expected_minutes: 0,
-          balance_minutes: 0,
+          expected_minutes: canonicalExpected,
+          balance_minutes: -canonicalExpected,
           break_minutes: 0,
           status: null,
           notes: null,
@@ -217,6 +227,9 @@ export function EmployeeReviewModal({
       if (!expectedDays.has(ts.work_date)) {
         allDaysList.push({
           ...ts,
+          // Days outside the scheduled week count as fully extra (no expected hours)
+          expected_minutes: 0,
+          balance_minutes: ts.worked_minutes || 0,
           punches: punchMap.get(ts.work_date) || [],
           isMissing: false,
         });
