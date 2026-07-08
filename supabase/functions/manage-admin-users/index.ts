@@ -139,11 +139,27 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Non-super admins must scope to their own companies and must provide at least one
+      if (!isSuperAdmin && role !== "super_admin") {
+        if (!company_ids || company_ids.length === 0) {
+          return new Response(JSON.stringify({ error: "Informe ao menos uma empresa" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const scopeErr = assertCompanyScope(company_ids);
+        if (scopeErr) {
+          return new Response(JSON.stringify({ error: scopeErr }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
       });
+
 
       if (createError) {
         return new Response(JSON.stringify({ error: createError.message }), {
