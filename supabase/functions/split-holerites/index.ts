@@ -121,7 +121,26 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Enforce admin/RH role
+    const { data: isAdminRh } = await supabase.rpc('is_admin_or_rh', { _user_id: user.id });
+    if (!isAdminRh) {
+      return new Response(JSON.stringify({ error: 'Sem permissão' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const { data: companyRows } = await supabase.rpc('get_user_company_ids', { _user_id: user.id });
+    const allowedCompanies = new Set((companyRows || []).map((r: any) => (typeof r === 'string' ? r : r.get_user_company_ids || r)));
+
+    const requireCompanyAccess = (cid: string | undefined | null) => {
+      if (!cid) return false;
+      return allowedCompanies.has(cid);
+    };
+    const requirePathInAllowedCompany = (storagePath: string | undefined | null) => {
+      if (!storagePath) return false;
+      const firstSeg = storagePath.split('/')[0];
+      return allowedCompanies.has(firstSeg);
+    };
+
     const contentType = req.headers.get('content-type') || '';
+
 
     // --- JSON body actions ---
     if (contentType.includes('application/json')) {
