@@ -84,21 +84,34 @@ Deno.serve(async (req) => {
         .from("user_company_access")
         .select("user_id, company_id, companies(nome)");
 
+      // Non super-admins only see users sharing at least one of their companies
+      const visibleUserIds = isSuperAdmin
+        ? new Set(userIds)
+        : new Set(
+            (companyAccess || [])
+              .filter(ca => callerCompanyIds.has(ca.company_id))
+              .map(ca => ca.user_id)
+          );
+
       // Get auth users
       const users = [];
       for (const uid of userIds) {
+        if (!visibleUserIds.has(uid)) continue;
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(uid);
         if (user) {
           const userRoles = roleEntries.filter(r => r.user_id === uid).map(r => r.role);
+          // Hide super_admin role from non super-admins
+          const filteredRoles = isSuperAdmin ? userRoles : userRoles.filter(r => r !== "super_admin");
+          if (filteredRoles.length === 0) continue;
           const userCompanies = (companyAccess || [])
-            .filter(ca => ca.user_id === uid)
+            .filter(ca => ca.user_id === uid && (isSuperAdmin || callerCompanyIds.has(ca.company_id)))
             .map(ca => ({ company_id: ca.company_id, nome: (ca.companies as any)?.nome }));
           
           users.push({
             id: user.id,
             email: user.email,
             created_at: user.created_at,
-            roles: userRoles,
+            roles: filteredRoles,
             companies: userCompanies,
           });
         }
@@ -108,6 +121,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     if (action === "create") {
       const { email, password, role, company_ids } = body;
