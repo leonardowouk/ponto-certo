@@ -154,6 +154,9 @@ serve(async (req) => {
         if (!storage_path || !assignments?.length || !company_id || !ref_month) {
           return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+        if (!requireCompanyAccess(company_id) || !requirePathInAllowedCompany(storage_path)) {
+          return new Response(JSON.stringify({ error: 'Sem acesso a esta empresa/arquivo.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
 
         const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
         if (downloadError || !fileData) {
@@ -189,6 +192,9 @@ serve(async (req) => {
         if (!storage_path || page == null) {
           return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+        if (!requirePathInAllowedCompany(storage_path)) {
+          return new Response(JSON.stringify({ error: 'Sem acesso a este arquivo.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
 
         const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
         if (downloadError || !fileData) {
@@ -213,6 +219,9 @@ serve(async (req) => {
 
       if (!storage_path || page == null || !employee_id || !company_id || !ref_month) {
         return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      if (!requireCompanyAccess(company_id) || !requirePathInAllowedCompany(storage_path)) {
+        return new Response(JSON.stringify({ error: 'Sem acesso a esta empresa/arquivo.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
@@ -247,6 +256,12 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Arquivo, empresa e mês de referência são obrigatórios.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!requireCompanyAccess(companyId)) {
+      return new Response(
+        JSON.stringify({ error: 'Sem acesso a esta empresa.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
