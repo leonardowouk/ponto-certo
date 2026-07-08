@@ -381,12 +381,31 @@ serve(async (req) => {
 
     // ACTION: ADMIN_LOGIN (gerar sessão admin sem bater ponto)
     if (action === 'admin_login') {
+      // Require PIN verification (same as validate) to prevent auth bypass
+      const pinValid = await verifyPin(pin, employee.pin_hash);
+      if (!pinValid) {
+        const newAttempts = (employee.failed_attempts || 0) + 1;
+        const updateData: Record<string, unknown> = { failed_attempts: newAttempts };
+        if (newAttempts >= 5) {
+          updateData.locked_until = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+        }
+        await supabase.from('employees').update(updateData).eq('id', employee.id);
+        await supabase.from('login_attempts').insert({ cpf_hash, device_id: deviceId, success: false });
+        return new Response(
+          JSON.stringify({ success: false, message: newAttempts >= 5 ? 'Muitas tentativas. Conta bloqueada por 2 minutos.' : 'PIN incorreto' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      await supabase.from('employees').update({ failed_attempts: 0, locked_until: null }).eq('id', employee.id);
+      await supabase.from('login_attempts').insert({ cpf_hash, device_id: deviceId, success: true });
+
       if (!employee.email) {
         return new Response(
           JSON.stringify({ success: false, message: 'Colaborador sem email cadastrado' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
 
       // Verify admin role
       const { data: authUsers } = await supabase.auth.admin.listUsers();
