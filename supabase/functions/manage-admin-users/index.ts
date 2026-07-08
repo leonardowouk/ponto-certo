@@ -283,9 +283,33 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Non super-admins may only delete users within their company scope and never super_admins
+      if (!isSuperAdmin) {
+        const { data: targetRoles } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user_id);
+        if ((targetRoles || []).some(r => r.role === "super_admin")) {
+          return new Response(JSON.stringify({ error: "Não é possível remover super admins" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const { data: targetAccess } = await supabaseAdmin
+          .from("user_company_access")
+          .select("company_id")
+          .eq("user_id", user_id);
+        const shares = (targetAccess || []).some(r => callerCompanyIds.has(r.company_id));
+        if (!shares) {
+          return new Response(JSON.stringify({ error: "Usuário fora do seu escopo de empresa" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
       await supabaseAdmin.from("user_company_access").delete().eq("user_id", user_id);
       await supabaseAdmin.auth.admin.deleteUser(user_id);
+
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
