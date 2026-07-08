@@ -203,6 +203,30 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Non super-admins may only touch users who share at least one of their companies
+      if (!isSuperAdmin) {
+        const { data: targetAccess } = await supabaseAdmin
+          .from("user_company_access")
+          .select("company_id")
+          .eq("user_id", user_id);
+        const shares = (targetAccess || []).some(r => callerCompanyIds.has(r.company_id));
+        if (!shares) {
+          return new Response(JSON.stringify({ error: "Usuário fora do seu escopo de empresa" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Prevent tampering with super_admin accounts
+        const { data: targetRoles } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user_id);
+        if ((targetRoles || []).some(r => r.role === "super_admin")) {
+          return new Response(JSON.stringify({ error: "Não é possível alterar super admins" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       if (role) {
         if (role === "super_admin" && !isSuperAdmin) {
           return new Response(JSON.stringify({ error: "Apenas super admin pode definir super admins" }), {
@@ -215,7 +239,22 @@ Deno.serve(async (req) => {
       }
 
       if (company_ids !== undefined) {
-        await supabaseAdmin.from("user_company_access").delete().eq("user_id", user_id);
+        const scopeErr = assertCompanyScope(company_ids);
+        if (scopeErr) {
+          return new Response(JSON.stringify({ error: scopeErr }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (isSuperAdmin) {
+          await supabaseAdmin.from("user_company_access").delete().eq("user_id", user_id);
+        } else {
+          // Only replace access rows for companies within caller's scope
+          await supabaseAdmin
+            .from("user_company_access")
+            .delete()
+            .eq("user_id", user_id)
+            .in("company_id", Array.from(callerCompanyIds));
+        }
         if (company_ids.length > 0) {
           const accessRows = company_ids.map((cid: string) => ({
             user_id,
@@ -229,6 +268,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     if (action === "delete") {
       const { user_id } = body;
