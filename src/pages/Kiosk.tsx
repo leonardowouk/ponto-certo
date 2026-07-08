@@ -53,6 +53,7 @@ const stepToNumber: Record<Step, number> = {
 export default function KioskPage() {
   const [step, setStep] = useState<Step>('cpf');
   const [cpf, setCPF] = useState('');
+  const [validatedPin, setValidatedPin] = useState('');
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [punchResult, setPunchResult] = useState<PunchResult | null>(null);
   const [pinError, setPinError] = useState('');
@@ -143,6 +144,7 @@ export default function KioskPage() {
 
       setEmployee(data.employee);
       setIsAdmin(data.is_admin || false);
+      setValidatedPin(pin);
       setStep('confirm');
     } catch (err) {
       console.error('Validation error:', err);
@@ -162,6 +164,7 @@ export default function KioskPage() {
       const { data, error } = await supabase.functions.invoke('ponto-validate', {
         body: {
           cpf_hash: cpfHash,
+          pin: validatedPin,
           device_secret: DEVICE_SECRET,
           action: 'admin_login',
         },

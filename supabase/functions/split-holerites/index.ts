@@ -121,7 +121,26 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Enforce admin/RH role
+    const { data: isAdminRh } = await supabase.rpc('is_admin_or_rh', { _user_id: user.id });
+    if (!isAdminRh) {
+      return new Response(JSON.stringify({ error: 'Sem permissão' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const { data: companyRows } = await supabase.rpc('get_user_company_ids', { _user_id: user.id });
+    const allowedCompanies = new Set((companyRows || []).map((r: any) => (typeof r === 'string' ? r : r.get_user_company_ids || r)));
+
+    const requireCompanyAccess = (cid: string | undefined | null) => {
+      if (!cid) return false;
+      return allowedCompanies.has(cid);
+    };
+    const requirePathInAllowedCompany = (storagePath: string | undefined | null) => {
+      if (!storagePath) return false;
+      const firstSeg = storagePath.split('/')[0];
+      return allowedCompanies.has(firstSeg);
+    };
+
     const contentType = req.headers.get('content-type') || '';
+
 
     // --- JSON body actions ---
     if (contentType.includes('application/json')) {
@@ -134,6 +153,9 @@ serve(async (req) => {
 
         if (!storage_path || !assignments?.length || !company_id || !ref_month) {
           return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        if (!requireCompanyAccess(company_id) || !requirePathInAllowedCompany(storage_path)) {
+          return new Response(JSON.stringify({ error: 'Sem acesso a esta empresa/arquivo.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
         const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
@@ -170,6 +192,9 @@ serve(async (req) => {
         if (!storage_path || page == null) {
           return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+        if (!requirePathInAllowedCompany(storage_path)) {
+          return new Response(JSON.stringify({ error: 'Sem acesso a este arquivo.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
 
         const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
         if (downloadError || !fileData) {
@@ -194,6 +219,9 @@ serve(async (req) => {
 
       if (!storage_path || page == null || !employee_id || !company_id || !ref_month) {
         return new Response(JSON.stringify({ error: 'Dados incompletos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      if (!requireCompanyAccess(company_id) || !requirePathInAllowedCompany(storage_path)) {
+        return new Response(JSON.stringify({ error: 'Sem acesso a esta empresa/arquivo.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       const { data: fileData, error: downloadError } = await supabase.storage.from('documentos').download(storage_path);
@@ -228,6 +256,12 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Arquivo, empresa e mês de referência são obrigatórios.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!requireCompanyAccess(companyId)) {
+      return new Response(
+        JSON.stringify({ error: 'Sem acesso a esta empresa.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

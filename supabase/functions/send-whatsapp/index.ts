@@ -46,6 +46,36 @@ Deno.serve(async (req) => {
 
     if (!company_id) throw new Error('company_id é obrigatório');
 
+    // Require authenticated admin/RH caller scoped to this company
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) {
+      return new Response(JSON.stringify({ success: false, error: 'Não autorizado' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      return new Response(JSON.stringify({ success: false, error: 'Não autorizado' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const callerId = userData.user.id;
+    const { data: isAdminOrRh } = await supabaseAdmin.rpc('is_admin_or_rh', { _user_id: callerId });
+    if (!isAdminOrRh) {
+      return new Response(JSON.stringify({ success: false, error: 'Sem permissão' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { data: companyIds } = await supabaseAdmin.rpc('get_user_company_ids', { _user_id: callerId });
+    const allowedCompanyIds = new Set((companyIds || []).map((r: any) => (typeof r === 'string' ? r : r.get_user_company_ids || r)));
+    if (!allowedCompanyIds.has(company_id)) {
+      return new Response(JSON.stringify({ success: false, error: 'Empresa fora do seu escopo' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+
     // Get Z-API credentials for this company
     const { data: integration, error: intError } = await supabaseAdmin
       .from('company_integrations')

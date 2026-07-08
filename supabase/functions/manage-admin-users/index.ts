@@ -46,6 +46,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Resolve caller's own companies for scoping
+    const { data: callerCompanyRows } = await supabaseAdmin
+      .from("user_company_access")
+      .select("company_id")
+      .eq("user_id", caller.id);
+    const callerCompanyIds = new Set((callerCompanyRows || []).map(r => r.company_id));
+
+    const assertCompanyScope = (ids: string[] | undefined) => {
+      if (isSuperAdmin) return null;
+      if (!ids || ids.length === 0) return null;
+      const outside = ids.filter(cid => !callerCompanyIds.has(cid));
+      if (outside.length > 0) return "Você não pode gerenciar empresas fora do seu escopo";
+      return null;
+    };
+
+
     const body = await req.json().catch(() => ({}));
     const action = body.action;
 
@@ -68,21 +84,34 @@ Deno.serve(async (req) => {
         .from("user_company_access")
         .select("user_id, company_id, companies(nome)");
 
+      // Non super-admins only see users sharing at least one of their companies
+      const visibleUserIds = isSuperAdmin
+        ? new Set(userIds)
+        : new Set(
+            (companyAccess || [])
+              .filter(ca => callerCompanyIds.has(ca.company_id))
+              .map(ca => ca.user_id)
+          );
+
       // Get auth users
       const users = [];
       for (const uid of userIds) {
+        if (!visibleUserIds.has(uid)) continue;
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(uid);
         if (user) {
           const userRoles = roleEntries.filter(r => r.user_id === uid).map(r => r.role);
+          // Hide super_admin role from non super-admins
+          const filteredRoles = isSuperAdmin ? userRoles : userRoles.filter(r => r !== "super_admin");
+          if (filteredRoles.length === 0) continue;
           const userCompanies = (companyAccess || [])
-            .filter(ca => ca.user_id === uid)
+            .filter(ca => ca.user_id === uid && (isSuperAdmin || callerCompanyIds.has(ca.company_id)))
             .map(ca => ({ company_id: ca.company_id, nome: (ca.companies as any)?.nome }));
           
           users.push({
             id: user.id,
             email: user.email,
             created_at: user.created_at,
-            roles: userRoles,
+            roles: filteredRoles,
             companies: userCompanies,
           });
         }
@@ -92,6 +121,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     if (action === "create") {
       const { email, password, role, company_ids } = body;
@@ -109,11 +139,27 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Non-super admins must scope to their own companies and must provide at least one
+      if (!isSuperAdmin && role !== "super_admin") {
+        if (!company_ids || company_ids.length === 0) {
+          return new Response(JSON.stringify({ error: "Informe ao menos uma empresa" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const scopeErr = assertCompanyScope(company_ids);
+        if (scopeErr) {
+          return new Response(JSON.stringify({ error: scopeErr }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
       });
+
 
       if (createError) {
         return new Response(JSON.stringify({ error: createError.message }), {
@@ -157,6 +203,30 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Non super-admins may only touch users who share at least one of their companies
+      if (!isSuperAdmin) {
+        const { data: targetAccess } = await supabaseAdmin
+          .from("user_company_access")
+          .select("company_id")
+          .eq("user_id", user_id);
+        const shares = (targetAccess || []).some(r => callerCompanyIds.has(r.company_id));
+        if (!shares) {
+          return new Response(JSON.stringify({ error: "Usuário fora do seu escopo de empresa" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Prevent tampering with super_admin accounts
+        const { data: targetRoles } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user_id);
+        if ((targetRoles || []).some(r => r.role === "super_admin")) {
+          return new Response(JSON.stringify({ error: "Não é possível alterar super admins" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       if (role) {
         if (role === "super_admin" && !isSuperAdmin) {
           return new Response(JSON.stringify({ error: "Apenas super admin pode definir super admins" }), {
@@ -169,7 +239,22 @@ Deno.serve(async (req) => {
       }
 
       if (company_ids !== undefined) {
-        await supabaseAdmin.from("user_company_access").delete().eq("user_id", user_id);
+        const scopeErr = assertCompanyScope(company_ids);
+        if (scopeErr) {
+          return new Response(JSON.stringify({ error: scopeErr }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (isSuperAdmin) {
+          await supabaseAdmin.from("user_company_access").delete().eq("user_id", user_id);
+        } else {
+          // Only replace access rows for companies within caller's scope
+          await supabaseAdmin
+            .from("user_company_access")
+            .delete()
+            .eq("user_id", user_id)
+            .in("company_id", Array.from(callerCompanyIds));
+        }
         if (company_ids.length > 0) {
           const accessRows = company_ids.map((cid: string) => ({
             user_id,
@@ -184,6 +269,7 @@ Deno.serve(async (req) => {
       });
     }
 
+
     if (action === "delete") {
       const { user_id } = body;
       if (!user_id) {
@@ -197,9 +283,33 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Non super-admins may only delete users within their company scope and never super_admins
+      if (!isSuperAdmin) {
+        const { data: targetRoles } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user_id);
+        if ((targetRoles || []).some(r => r.role === "super_admin")) {
+          return new Response(JSON.stringify({ error: "Não é possível remover super admins" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const { data: targetAccess } = await supabaseAdmin
+          .from("user_company_access")
+          .select("company_id")
+          .eq("user_id", user_id);
+        const shares = (targetAccess || []).some(r => callerCompanyIds.has(r.company_id));
+        if (!shares) {
+          return new Response(JSON.stringify({ error: "Usuário fora do seu escopo de empresa" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
       await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
       await supabaseAdmin.from("user_company_access").delete().eq("user_id", user_id);
       await supabaseAdmin.auth.admin.deleteUser(user_id);
+
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
