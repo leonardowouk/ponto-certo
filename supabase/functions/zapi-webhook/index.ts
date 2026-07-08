@@ -148,6 +148,18 @@ Deno.serve(async (req) => {
       return new Response('ok', { headers: corsHeaders });
     }
 
+    // Verify webhook authenticity via shared Client-Token header. Requests without
+    // a configured client_token, or with a mismatching header, are rejected to
+    // prevent spoofed inbound WhatsApp payloads.
+    const incomingClientToken = req.headers.get('client-token') || req.headers.get('Client-Token') || '';
+    if (!integration.client_token || incomingClientToken !== integration.client_token) {
+      console.warn('zapi-webhook rejected: invalid Client-Token for instance', instanceId);
+      return new Response(JSON.stringify({ ok: false, error: 'invalid signature' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+
     const baseUrl = `https://api.z-api.io/instances/${integration.instance_id}/token/${integration.instance_token}`;
     const clientToken = integration.client_token;
 
