@@ -162,6 +162,7 @@ export default function KioskPage() {
       const { data, error } = await supabase.functions.invoke('ponto-validate', {
         body: {
           cpf_hash: cpfHash,
+          pin,
           device_secret: DEVICE_SECRET,
           action: 'admin_login',
         },
