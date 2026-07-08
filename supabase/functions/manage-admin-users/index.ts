@@ -46,6 +46,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Resolve caller's own companies for scoping
+    const { data: callerCompanyRows } = await supabaseAdmin
+      .from("user_company_access")
+      .select("company_id")
+      .eq("user_id", caller.id);
+    const callerCompanyIds = new Set((callerCompanyRows || []).map(r => r.company_id));
+
+    const assertCompanyScope = (ids: string[] | undefined) => {
+      if (isSuperAdmin) return null;
+      if (!ids || ids.length === 0) return null;
+      const outside = ids.filter(cid => !callerCompanyIds.has(cid));
+      if (outside.length > 0) return "Você não pode gerenciar empresas fora do seu escopo";
+      return null;
+    };
+
+
     const body = await req.json().catch(() => ({}));
     const action = body.action;
 
