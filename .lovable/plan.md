@@ -1,48 +1,27 @@
-# Aprovação de Correções de Ponto (Admin)
+# Relatório de Horas — Alana Rodrigues Machado (Drop's)
 
-Hoje a tabela `punch_corrections` recebe solicitações dos colaboradores via portal, mas **não há nenhuma tela admin** para visualizar/aprovar/rejeitar. Vamos criar essa tela e integrar com o fechamento mensal.
+Gerar uma planilha Excel com os horários de entrada/saída da Alana desde 01/03/2026, para apoiar o fechamento de horas dela.
 
-## 1. Nova página: `/admin/corrections`
+## Dados confirmados
+- Colaboradora: ALANA RODRIGUES MACHADO (Supervisora Operacional, Drop's Café & Cia)
+- 399 batidas de ponto desde 04/03/2026 até 26/08/2026
+- 129 dias consolidados em `timesheets_daily` no período
 
-Arquivo: `src/pages/admin/Corrections.tsx`
+## Conteúdo da planilha
 
-- Listar todas as solicitações de `punch_corrections` da empresa selecionada (join com `employees` para nome/setor).
-- Abas por status: **Pendentes** (default) | Aprovadas | Rejeitadas | Todas.
-- Cada linha mostra: colaborador, data, tipo de batida, horário solicitado, motivo, anexo (se houver), data da solicitação.
-- Ações em pendentes: **Aprovar** / **Rejeitar** (com campo opcional de "observação do revisor").
-- Ao **aprovar**:
-  - Inserir uma `time_punches` manual com `employee_id`, `punch_type`, `punched_at = work_date + requested_time`, `unidade = 'manual'`, `status = 'ok'`.
-  - Atualizar `punch_corrections`: `status='aprovado'`, `reviewed_by=auth.uid()`, `reviewed_at=now()`, `review_notes`.
-  - Recalcular o dia: re-rodar a mesma lógica que `EmployeeReviewModal` usa para atualizar `timesheets_daily` daquele dia (extrair em util `recalculateDailyTimesheet(employee_id, work_date)`).
-- Ao **rejeitar**: apenas atualiza status + notas (sem criar batida).
+**Aba 1 — Resumo diário** (a partir de `timesheets_daily`):
+- Data (dia da semana)
+- Primeira batida / Última batida
+- Horas trabalhadas, intervalo, horas esperadas, saldo do dia
+- Status do dia (ok, falta, abono, revisão, ajustado)
+- Linha de totais: horas trabalhadas, esperadas e saldo acumulado
 
-## 2. Sidebar e rota
+**Aba 2 — Batidas brutas** (a partir de `time_punches`):
+- Data e hora exata de cada batida, tipo (entrada/saída/intervalo início/fim), status e unidade
 
-- Adicionar item **"Correções de Ponto"** no `AdminLayout.tsx` (ícone `MessageSquareWarning` ou `ClipboardCheck`), entre "Espelho de Ponto" e "Extras".
-- Mostrar **badge com contador** de pendentes ao lado do label (query rápida `count` filtrada por company + status='pendente').
-- Registrar rota em `src/App.tsx`.
+**Aba 3 — Resumo mensal**: horas trabalhadas, esperadas e saldo consolidado por mês (mar–ago), para o fechamento.
 
-## 3. Integração no Fechamento Mensal
-
-No `EmployeeReviewModal.tsx`, na lista de dias **sem ponto** (`missing-${dateStr}`):
-
-- Ao montar a lista, buscar `punch_corrections` do colaborador no mês (status='pendente').
-- Se existir uma solicitação pendente para aquele dia, exibir um **alerta inline amarelo** no card do dia: *"Solicitação de correção pendente: [tipo] às [hora] — [motivo]"* com botões **Aprovar** / **Rejeitar** (mesma lógica da página de Corrections).
-- Aprovar transforma o "dia sem ponto" em um dia com batida e remove o alerta.
-
-## 4. Helper compartilhado
-
-Criar `src/lib/punchCorrections.ts` com:
-
-- `approveCorrection(correctionId, reviewNotes?)` — cria `time_punches`, atualiza `punch_corrections`, recalcula `timesheets_daily` do dia.
-- `rejectCorrection(correctionId, reviewNotes)` — apenas atualiza status.
-- `recalculateDailyTimesheet(employeeId, workDate)` — re-agrega batidas do dia (entrada/saída/intervalos), grava `worked_minutes`, `balance_minutes`, etc. Pode ser uma versão simplificada chamando a mesma lógica já presente em outros pontos do código.
-
-## 5. Migração
-
-Nenhuma. RLS já permite Admin/RH ler e atualizar `punch_corrections`, e inserir em `time_punches`.
-
----
-
-**Decisão pendente** (default se você não responder):
-- *Aprovação automática como o banco de horas?* → **Não** — correções precisam de revisão humana porque criam batidas físicas no espelho. Default = **fluxo manual com aprovar/rejeitar**.
+## Execução
+1. Extrair dados com consulta ao banco (psql) filtrando pelo `employee_id` da Alana e período >= 2026-03-01.
+2. Gerar o arquivo `.xlsx` com openpyxl (formatação: cabeçalho em destaque, horas em formato `h:mm`, totais via fórmulas SUM, zeros como "-", sem erros de fórmula — recalcular com LibreOffice).
+3. Salvar em `/mnt/documents/relatorio-ponto-alana-mar-ago-2026.xlsx` e entregar o arquivo no chat.
