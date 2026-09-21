@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,9 +31,10 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, UserX, UserCheck, Loader2, Search } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Loader2, Search, Eye } from 'lucide-react';
 import { hashCPF, formatCPF, validateCPF } from '@/lib/hash';
 import { Switch } from '@/components/ui/switch';
+import { CONTRACT_TYPES } from '@/lib/hrStatus';
 
 interface Sector {
   id: string;
@@ -48,6 +50,12 @@ interface Employee {
   setor: string | null;
   sector_id: string | null;
   data_admissao: string | null;
+  data_nascimento: string | null;
+  matricula: string | null;
+  tipo_contrato: string | null;
+  admission_status: string | null;
+  email: string | null;
+  telefone: string | null;
   created_at: string;
   sectors?: { nome: string } | null;
 }
@@ -57,10 +65,13 @@ export default function EmployeesPage() {
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [sectorFilter, setSectorFilter] = useState('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const { toast } = useToast();
   const { selectedCompanyId } = useCompany();
+  const navigate = useNavigate();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -70,6 +81,9 @@ export default function EmployeesPage() {
     cargo: '',
     sector_id: '',
     data_admissao: '',
+    data_nascimento: '',
+    matricula: '',
+    tipo_contrato: '',
     telefone: '',
     hasAdminAccess: false,
     email: '',
@@ -86,7 +100,7 @@ export default function EmployeesPage() {
     try {
       let query = supabase
         .from('employees')
-        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, telefone, created_at, sectors(nome)')
+        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, data_nascimento, matricula, tipo_contrato, admission_status, email, telefone, created_at, sectors(nome)')
         .order('nome');
 
       if (selectedCompanyId) {
@@ -139,7 +153,10 @@ export default function EmployeesPage() {
         cargo: employee.cargo || '',
         sector_id: employee.sector_id || '',
         data_admissao: employee.data_admissao || '',
-        telefone: (employee as any).telefone || '',
+        data_nascimento: employee.data_nascimento || '',
+        matricula: employee.matricula || '',
+        tipo_contrato: employee.tipo_contrato || '',
+        telefone: employee.telefone || '',
         hasAdminAccess: false,
         email: '',
         password: '',
@@ -153,6 +170,9 @@ export default function EmployeesPage() {
         cargo: '',
         sector_id: '',
         data_admissao: '',
+        data_nascimento: '',
+        matricula: '',
+        tipo_contrato: '',
         telefone: '',
         hasAdminAccess: false,
         email: '',
@@ -174,6 +194,9 @@ export default function EmployeesPage() {
           cargo: formData.cargo || null,
           sector_id: formData.sector_id || null,
           data_admissao: formData.data_admissao || null,
+          data_nascimento: formData.data_nascimento || null,
+          matricula: formData.matricula || null,
+          tipo_contrato: formData.tipo_contrato || null,
           telefone: formData.telefone || null,
         };
 
@@ -279,6 +302,9 @@ export default function EmployeesPage() {
             cargo: formData.cargo || null,
             sector_id: formData.sector_id || null,
             data_admissao: formData.data_admissao || null,
+            data_nascimento: formData.data_nascimento || null,
+            matricula: formData.matricula || null,
+            tipo_contrato: formData.tipo_contrato || null,
             telefone: formData.telefone || null,
             email: formData.hasAdminAccess ? formData.email : null,
             company_id: selectedCompanyId || null,
@@ -350,9 +376,20 @@ export default function EmployeesPage() {
 
   const filteredEmployees = employees.filter(emp => {
     const sectorName = emp.sectors?.nome || emp.setor || '';
-    return emp.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sectorName.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesTerm =
+      !term ||
+      emp.nome.toLowerCase().includes(term) ||
+      emp.cargo?.toLowerCase().includes(term) ||
+      emp.matricula?.toLowerCase().includes(term) ||
+      emp.email?.toLowerCase().includes(term) ||
+      sectorName.toLowerCase().includes(term);
+    const matchesStatus =
+      statusFilter === 'todos' ||
+      (statusFilter === 'ativos' && emp.ativo) ||
+      (statusFilter === 'inativos' && !emp.ativo);
+    const matchesSector = sectorFilter === 'todos' || emp.sector_id === sectorFilter;
+    return matchesTerm && matchesStatus && matchesSector;
   });
 
   return (
