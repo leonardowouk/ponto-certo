@@ -52,14 +52,13 @@ function buildItems(rows: Row[], field: 'data_nascimento' | 'data_admissao', mon
     .filter(r => !!r[field])
     .map(r => {
       const { year, month: m, day } = parseDate(r[field] as string);
-      const completes = currentYear - year + (daysUntil(m, day) === 0 ? 0 : (new Date().getMonth() + 1 > m || (new Date().getMonth() + 1 === m && new Date().getDate() > day) ? 0 : 0));
       return {
         id: r.id,
         nome: r.nome,
         cargo: r.cargo,
         day,
         month: m,
-        years: Math.max(0, completes),
+        years: Math.max(0, currentYear - year),
         days: daysUntil(m, day),
       };
     })
