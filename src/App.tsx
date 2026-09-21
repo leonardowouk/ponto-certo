@@ -8,6 +8,8 @@ import Kiosk from "./pages/Kiosk";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/admin/Dashboard";
 import Employees from "./pages/admin/Employees";
+import EmployeeDetail from "./pages/admin/EmployeeDetail";
+import Birthdays from "./pages/admin/Birthdays";
 import Sectors from "./pages/admin/Sectors";
 import Timesheet from "./pages/admin/Timesheet";
 import HourBank from "./pages/admin/HourBank";
@@ -42,6 +44,8 @@ const AdminRoutes = () => (
     <Routes>
       <Route path="/" element={<AdminDashboard />} />
       <Route path="/employees" element={<Employees />} />
+      <Route path="/employees/:id" element={<EmployeeDetail />} />
+      <Route path="/birthdays" element={<Birthdays />} />
       <Route path="/sectors" element={<Sectors />} />
       <Route path="/timesheet" element={<Timesheet />} />
       <Route path="/hourbank" element={<HourBank />} />

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/admin/AdminLayout';
 import { useCompany } from '@/contexts/CompanyContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,9 +31,10 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Pencil, UserX, UserCheck, Loader2, Search } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Loader2, Search, Eye } from 'lucide-react';
 import { hashCPF, formatCPF, validateCPF } from '@/lib/hash';
 import { Switch } from '@/components/ui/switch';
+import { CONTRACT_TYPES } from '@/lib/hrStatus';
 
 interface Sector {
   id: string;
@@ -48,6 +50,12 @@ interface Employee {
   setor: string | null;
   sector_id: string | null;
   data_admissao: string | null;
+  data_nascimento: string | null;
+  matricula: string | null;
+  tipo_contrato: string | null;
+  admission_status: string | null;
+  email: string | null;
+  telefone: string | null;
   created_at: string;
   sectors?: { nome: string } | null;
 }
@@ -57,10 +65,13 @@ export default function EmployeesPage() {
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [sectorFilter, setSectorFilter] = useState('todos');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const { toast } = useToast();
   const { selectedCompanyId } = useCompany();
+  const navigate = useNavigate();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -70,6 +81,9 @@ export default function EmployeesPage() {
     cargo: '',
     sector_id: '',
     data_admissao: '',
+    data_nascimento: '',
+    matricula: '',
+    tipo_contrato: '',
     telefone: '',
     hasAdminAccess: false,
     email: '',
@@ -86,7 +100,7 @@ export default function EmployeesPage() {
     try {
       let query = supabase
         .from('employees')
-        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, telefone, created_at, sectors(nome)')
+        .select('id, nome, cpf_hash, ativo, cargo, setor, sector_id, data_admissao, data_nascimento, matricula, tipo_contrato, admission_status, email, telefone, created_at, sectors(nome)')
         .order('nome');
 
       if (selectedCompanyId) {
@@ -139,7 +153,10 @@ export default function EmployeesPage() {
         cargo: employee.cargo || '',
         sector_id: employee.sector_id || '',
         data_admissao: employee.data_admissao || '',
-        telefone: (employee as any).telefone || '',
+        data_nascimento: employee.data_nascimento || '',
+        matricula: employee.matricula || '',
+        tipo_contrato: employee.tipo_contrato || '',
+        telefone: employee.telefone || '',
         hasAdminAccess: false,
         email: '',
         password: '',
@@ -153,6 +170,9 @@ export default function EmployeesPage() {
         cargo: '',
         sector_id: '',
         data_admissao: '',
+        data_nascimento: '',
+        matricula: '',
+        tipo_contrato: '',
         telefone: '',
         hasAdminAccess: false,
         email: '',
@@ -174,6 +194,9 @@ export default function EmployeesPage() {
           cargo: formData.cargo || null,
           sector_id: formData.sector_id || null,
           data_admissao: formData.data_admissao || null,
+          data_nascimento: formData.data_nascimento || null,
+          matricula: formData.matricula || null,
+          tipo_contrato: formData.tipo_contrato || null,
           telefone: formData.telefone || null,
         };
 
@@ -279,6 +302,9 @@ export default function EmployeesPage() {
             cargo: formData.cargo || null,
             sector_id: formData.sector_id || null,
             data_admissao: formData.data_admissao || null,
+            data_nascimento: formData.data_nascimento || null,
+            matricula: formData.matricula || null,
+            tipo_contrato: formData.tipo_contrato || null,
             telefone: formData.telefone || null,
             email: formData.hasAdminAccess ? formData.email : null,
             company_id: selectedCompanyId || null,
@@ -350,23 +376,53 @@ export default function EmployeesPage() {
 
   const filteredEmployees = employees.filter(emp => {
     const sectorName = emp.sectors?.nome || emp.setor || '';
-    return emp.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.cargo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sectorName.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesTerm =
+      !term ||
+      emp.nome.toLowerCase().includes(term) ||
+      emp.cargo?.toLowerCase().includes(term) ||
+      emp.matricula?.toLowerCase().includes(term) ||
+      emp.email?.toLowerCase().includes(term) ||
+      sectorName.toLowerCase().includes(term);
+    const matchesStatus =
+      statusFilter === 'todos' ||
+      (statusFilter === 'ativos' && emp.ativo) ||
+      (statusFilter === 'inativos' && !emp.ativo);
+    const matchesSector = sectorFilter === 'todos' || emp.sector_id === sectorFilter;
+    return matchesTerm && matchesStatus && matchesSector;
   });
 
   return (
     <AdminLayout currentPage="employees">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar colaborador..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center flex-1">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Nome, matrícula, cargo ou e-mail..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="ativos">Ativos</SelectItem>
+                <SelectItem value="inativos">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sectorFilter} onValueChange={setSectorFilter}>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os setores</SelectItem>
+                {sectors.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -376,7 +432,7 @@ export default function EmployeesPage() {
                 Novo Colaborador
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingEmployee ? 'Editar Colaborador' : 'Novo Colaborador'}
@@ -472,6 +528,44 @@ export default function EmployeesPage() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data_nascimento">Data de Nascimento</Label>
+                    <Input
+                      id="data_nascimento"
+                      type="date"
+                      value={formData.data_nascimento}
+                      onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="matricula">Matrícula</Label>
+                    <Input
+                      id="matricula"
+                      value={formData.matricula}
+                      onChange={(e) => setFormData({ ...formData, matricula: e.target.value })}
+                      placeholder="Ex: 1024"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tipo_contrato">Tipo de contrato</Label>
+                  <Select
+                    value={formData.tipo_contrato}
+                    onValueChange={(v) => setFormData({ ...formData, tipo_contrato: v })}
+                  >
+                    <SelectTrigger id="tipo_contrato">
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONTRACT_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Acesso Administrativo */}
                 {!editingEmployee && (
                   <div className="space-y-4 border-t pt-4">
@@ -551,6 +645,7 @@ export default function EmployeesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Matrícula</TableHead>
                     <TableHead>Cargo</TableHead>
                     <TableHead>Setor</TableHead>
                     <TableHead>Status</TableHead>
@@ -561,7 +656,7 @@ export default function EmployeesPage() {
                 <TableBody>
                   {filteredEmployees.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                         Nenhum colaborador encontrado
                       </TableCell>
                     </TableRow>
@@ -569,6 +664,7 @@ export default function EmployeesPage() {
                     filteredEmployees.map((employee) => (
                       <TableRow key={employee.id}>
                         <TableCell className="font-medium">{employee.nome}</TableCell>
+                        <TableCell>{employee.matricula || '-'}</TableCell>
                         <TableCell>{employee.cargo || '-'}</TableCell>
                         <TableCell>{employee.sectors?.nome || employee.setor || '-'}</TableCell>
                         <TableCell>
@@ -578,12 +674,20 @@ export default function EmployeesPage() {
                         </TableCell>
                         <TableCell>
                           {employee.data_admissao 
-                            ? new Date(employee.data_admissao).toLocaleDateString('pt-BR')
+                            ? new Date(`${employee.data_admissao}T12:00:00`).toLocaleDateString('pt-BR')
                             : '-'
                           }
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Ver ficha completa"
+                              onClick={() => navigate(`/admin/employees/${employee.id}`)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"

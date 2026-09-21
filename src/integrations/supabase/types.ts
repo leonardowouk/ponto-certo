@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          actor_name: string | null
+          actor_role: string | null
+          actor_user_id: string | null
+          company_id: string | null
+          created_at: string
+          details: Json
+          document_id: string | null
+          employee_id: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          ip_address: string | null
+          result: string
+        }
+        Insert: {
+          action: string
+          actor_name?: string | null
+          actor_role?: string | null
+          actor_user_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          details?: Json
+          document_id?: string | null
+          employee_id?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          ip_address?: string | null
+          result?: string
+        }
+        Update: {
+          action?: string
+          actor_name?: string | null
+          actor_role?: string | null
+          actor_user_id?: string | null
+          company_id?: string | null
+          created_at?: string
+          details?: Json
+          document_id?: string | null
+          employee_id?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          ip_address?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checklist_agendamento_employees: {
         Row: {
           agendamento_id: string
@@ -471,6 +537,82 @@ export type Database = {
           },
         ]
       }
+      departments: {
+        Row: {
+          ativo: boolean
+          company_id: string
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          company_id: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          company_id?: string
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_categories: {
+        Row: {
+          ativo: boolean
+          company_id: string | null
+          created_at: string
+          id: string
+          nome: string
+          ordem: number
+          slug: string
+        }
+        Insert: {
+          ativo?: boolean
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          ordem?: number
+          slug: string
+        }
+        Update: {
+          ativo?: boolean
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          ordem?: number
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_categories_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_signatures: {
         Row: {
           acceptance_text: string | null
@@ -596,6 +738,7 @@ export type Database = {
       }
       employees: {
         Row: {
+          admission_status: string | null
           ativo: boolean | null
           auth_user_id: string | null
           cargo: string | null
@@ -604,19 +747,27 @@ export type Database = {
           cpf_hash: string
           created_at: string | null
           data_admissao: string | null
+          data_desligamento: string | null
+          data_nascimento: string | null
+          department_id: string | null
           email: string | null
           failed_attempts: number | null
           foto_cadastro_url: string | null
           id: string
           locked_until: string | null
+          matricula: string | null
           nome: string
           pin_hash: string
+          position_id: string | null
           sector_id: string | null
           setor: string | null
+          situacao: string | null
           telefone: string | null
+          tipo_contrato: string | null
           updated_at: string | null
         }
         Insert: {
+          admission_status?: string | null
           ativo?: boolean | null
           auth_user_id?: string | null
           cargo?: string | null
@@ -625,19 +776,27 @@ export type Database = {
           cpf_hash: string
           created_at?: string | null
           data_admissao?: string | null
+          data_desligamento?: string | null
+          data_nascimento?: string | null
+          department_id?: string | null
           email?: string | null
           failed_attempts?: number | null
           foto_cadastro_url?: string | null
           id?: string
           locked_until?: string | null
+          matricula?: string | null
           nome: string
           pin_hash: string
+          position_id?: string | null
           sector_id?: string | null
           setor?: string | null
+          situacao?: string | null
           telefone?: string | null
+          tipo_contrato?: string | null
           updated_at?: string | null
         }
         Update: {
+          admission_status?: string | null
           ativo?: boolean | null
           auth_user_id?: string | null
           cargo?: string | null
@@ -646,16 +805,23 @@ export type Database = {
           cpf_hash?: string
           created_at?: string | null
           data_admissao?: string | null
+          data_desligamento?: string | null
+          data_nascimento?: string | null
+          department_id?: string | null
           email?: string | null
           failed_attempts?: number | null
           foto_cadastro_url?: string | null
           id?: string
           locked_until?: string | null
+          matricula?: string | null
           nome?: string
           pin_hash?: string
+          position_id?: string | null
           sector_id?: string | null
           setor?: string | null
+          situacao?: string | null
           telefone?: string | null
+          tipo_contrato?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -664,6 +830,20 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employees_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
             referencedColumns: ["id"]
           },
           {
@@ -1015,6 +1195,108 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          employee_id: string | null
+          id: string
+          lida_em: string | null
+          link: string | null
+          mensagem: string | null
+          tipo: string
+          titulo: string
+          user_id: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          lida_em?: string | null
+          link?: string | null
+          mensagem?: string | null
+          tipo: string
+          titulo: string
+          user_id?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          lida_em?: string | null
+          link?: string | null
+          mensagem?: string | null
+          tipo?: string
+          titulo?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      positions: {
+        Row: {
+          ativo: boolean
+          company_id: string
+          created_at: string
+          department_id: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          company_id: string
+          created_at?: string
+          department_id?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          company_id?: string
+          created_at?: string
+          department_id?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "positions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "positions_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
             referencedColumns: ["id"]
           },
         ]
