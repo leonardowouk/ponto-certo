@@ -69,5 +69,5 @@ Entrego fase por fase, testando permissões, dados e fluxo ao fim de cada uma an
 
 ## Decisões que preciso de você
 
-- Qual provedor de assinatura a empresa pretende contratar (Clicksign, D4Sign, ZapSign, outro)? Sem isso, entrego a camada pronta e o método interno atual segue ativo.
+- A empresa já tem (ou vai solicitar) o credenciamento da integração de assinatura do gov.br? Sem as credenciais, deixo o fluxo pronto em homologação.
 - Hoje as notificações vão por WhatsApp. Quer também por e-mail? Nesse caso será preciso um serviço de envio (ex.: Resend) com um domínio seu.
