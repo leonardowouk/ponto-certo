@@ -17,6 +17,7 @@ Ou seja: boa parte das fases 1, 3, 5 e 6 do pedido já está de pé. O plano aba
 - Cargos e departamentos viram listas gerenciáveis (hoje cargo/setor são texto livre; o texto atual é preservado).
 - Página de detalhes do colaborador com abas: Dados pessoais, Dados profissionais, Documentos, Admissão, Holerites, Ponto, Histórico.
 - Busca por nome, CPF, matrícula, e-mail e filtros por status, departamento, cargo e data de admissão.
+- Área de Aniversários: aniversariantes do mês (data de nascimento) e aniversários de tempo de empresa, com quantos anos a pessoa completa, filtro por mês e destaque dos próximos dias. Também aparece como card no painel do RH.
 
 ### Fase 2 — Admissão digital
 - Novo menu "Admissões": abrir processo, etapa de cadastro inicial, etapa de envio dos documentos da contabilidade (vários arquivos de uma vez).
