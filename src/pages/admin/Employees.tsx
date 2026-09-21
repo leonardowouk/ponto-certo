@@ -395,15 +395,34 @@ export default function EmployeesPage() {
   return (
     <AdminLayout currentPage="employees">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar colaborador..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center flex-1">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Nome, matrícula, cargo ou e-mail..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="ativos">Ativos</SelectItem>
+                <SelectItem value="inativos">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sectorFilter} onValueChange={setSectorFilter}>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os setores</SelectItem>
+                {sectors.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -413,7 +432,7 @@ export default function EmployeesPage() {
                 Novo Colaborador
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingEmployee ? 'Editar Colaborador' : 'Novo Colaborador'}
@@ -509,6 +528,44 @@ export default function EmployeesPage() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data_nascimento">Data de Nascimento</Label>
+                    <Input
+                      id="data_nascimento"
+                      type="date"
+                      value={formData.data_nascimento}
+                      onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="matricula">Matrícula</Label>
+                    <Input
+                      id="matricula"
+                      value={formData.matricula}
+                      onChange={(e) => setFormData({ ...formData, matricula: e.target.value })}
+                      placeholder="Ex: 1024"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="tipo_contrato">Tipo de contrato</Label>
+                  <Select
+                    value={formData.tipo_contrato}
+                    onValueChange={(v) => setFormData({ ...formData, tipo_contrato: v })}
+                  >
+                    <SelectTrigger id="tipo_contrato">
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONTRACT_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Acesso Administrativo */}
                 {!editingEmployee && (
                   <div className="space-y-4 border-t pt-4">
@@ -588,6 +645,7 @@ export default function EmployeesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
+                    <TableHead>Matrícula</TableHead>
                     <TableHead>Cargo</TableHead>
                     <TableHead>Setor</TableHead>
                     <TableHead>Status</TableHead>
@@ -598,7 +656,7 @@ export default function EmployeesPage() {
                 <TableBody>
                   {filteredEmployees.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                         Nenhum colaborador encontrado
                       </TableCell>
                     </TableRow>
@@ -606,6 +664,7 @@ export default function EmployeesPage() {
                     filteredEmployees.map((employee) => (
                       <TableRow key={employee.id}>
                         <TableCell className="font-medium">{employee.nome}</TableCell>
+                        <TableCell>{employee.matricula || '-'}</TableCell>
                         <TableCell>{employee.cargo || '-'}</TableCell>
                         <TableCell>{employee.sectors?.nome || employee.setor || '-'}</TableCell>
                         <TableCell>
@@ -615,12 +674,20 @@ export default function EmployeesPage() {
                         </TableCell>
                         <TableCell>
                           {employee.data_admissao 
-                            ? new Date(employee.data_admissao).toLocaleDateString('pt-BR')
+                            ? new Date(`${employee.data_admissao}T12:00:00`).toLocaleDateString('pt-BR')
                             : '-'
                           }
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Ver ficha completa"
+                              onClick={() => navigate(`/admin/employees/${employee.id}`)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
