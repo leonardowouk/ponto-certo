@@ -8,6 +8,13 @@
       "when": 1790025856610,
       "tag": "0000_rh_fase1_colaboradores",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790026150662,
+      "tag": "0001_rh_fase2_admissao_digital",
+      "breakpoints": true
     }
   ]
 }
