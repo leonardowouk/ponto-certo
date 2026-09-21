@@ -17,6 +17,7 @@ Ou seja: boa parte das fases 1, 3, 5 e 6 do pedido já está de pé. O plano aba
 - Cargos e departamentos viram listas gerenciáveis (hoje cargo/setor são texto livre; o texto atual é preservado).
 - Página de detalhes do colaborador com abas: Dados pessoais, Dados profissionais, Documentos, Admissão, Holerites, Ponto, Histórico.
 - Busca por nome, CPF, matrícula, e-mail e filtros por status, departamento, cargo e data de admissão.
+- Área de Aniversários: aniversariantes do mês (data de nascimento) e aniversários de tempo de empresa, com quantos anos a pessoa completa, filtro por mês e destaque dos próximos dias. Também aparece como card no painel do RH.
 
 ### Fase 2 — Admissão digital
 - Novo menu "Admissões": abrir processo, etapa de cadastro inicial, etapa de envio dos documentos da contabilidade (vários arquivos de uma vez).
@@ -25,11 +26,16 @@ Ou seja: boa parte das fases 1, 3, 5 e 6 do pedido já está de pé. O plano aba
 - Status: pré-admissão, em admissão, aguardando assinatura, concluída, ativo, inativo, desligado.
 
 ### Fase 3 — Assinatura com provedor externo
-- Camada de assinatura desacoplada, preparada para plugar um provedor de assinatura eletrônica (ex.: Clicksign, D4Sign, ZapSign) sem reescrever o sistema.
-- Guarda separada de: documento original, documento assinado e evidências (signatário, CPF, e-mail, data/hora, IP, hash, identificador da transação, relatório do provedor).
-- Endpoint seguro para receber as confirmações do provedor, com verificação de autenticidade e proteção contra eventos repetidos.
-- Enquanto nenhum provedor estiver contratado, o método atual (PIN + foto + código) continua funcionando e fica identificado como assinatura interna — sem ser apresentado como assinatura qualificada.
-- Área de configuração: provedor, credenciais (guardadas fora do aplicativo), ambiente de teste/produção, endereço de retorno.
+### Fase 3 — Assinatura via gov.br
+- Assinatura feita com a conta gov.br do colaborador (assinatura avançada do padrão ICP-Brasil, conforme a Lei 14.063/2020), exigindo conta nível prata ou ouro.
+- Fluxo: o colaborador abre o documento no portal, é levado ao login gov.br, autoriza a assinatura e volta ao sistema com o documento já assinado pelo serviço do gov.br.
+- Guarda separada de: documento original, documento assinado pelo gov.br e evidências (nome, CPF, e-mail, data/hora, IP, hash do arquivo, identificador da transação, nível da conta gov.br e relatório retornado).
+- A integração fica numa camada desacoplada, para que outro provedor possa ser somado depois sem refazer o sistema.
+- Endpoint seguro para receber as confirmações, com verificação de autenticidade e proteção contra eventos repetidos.
+- O método interno atual (PIN + foto + código) continua existindo para aceites simples (holerites, comunicados), claramente identificado como aceite eletrônico interno — não como assinatura gov.br.
+- Área de configuração: credenciais do gov.br (guardadas fora do aplicativo), ambiente de homologação/produção, endereço de retorno.
+
+Observação: usar a assinatura gov.br exige que a empresa faça o credenciamento junto ao gov.br para obter as credenciais da integração. Enquanto elas não existirem, entrego o fluxo pronto rodando no ambiente de homologação.
 
 ### Fase 4 — Acesso automático
 - Ao concluir a admissão, o acesso do colaborador é criado e vinculado automaticamente, com convite por link de ativação (senha nunca vai por e-mail).
@@ -63,5 +69,5 @@ Entrego fase por fase, testando permissões, dados e fluxo ao fim de cada uma an
 
 ## Decisões que preciso de você
 
-- Qual provedor de assinatura a empresa pretende contratar (Clicksign, D4Sign, ZapSign, outro)? Sem isso, entrego a camada pronta e o método interno atual segue ativo.
+- A empresa já tem (ou vai solicitar) o credenciamento da integração de assinatura do gov.br? Sem as credenciais, deixo o fluxo pronto em homologação.
 - Hoje as notificações vão por WhatsApp. Quer também por e-mail? Nesse caso será preciso um serviço de envio (ex.: Resend) com um domínio seu.
