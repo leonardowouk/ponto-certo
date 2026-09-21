@@ -14,6 +14,149 @@ export type Database = {
   }
   public: {
     Tables: {
+      admission_documents: {
+        Row: {
+          assinado_em: string | null
+          categoria: string
+          company_id: string
+          created_at: string
+          created_by: string | null
+          document_id: string | null
+          employee_id: string
+          enviado_em: string | null
+          file_url: string | null
+          id: string
+          obrigatorio: boolean
+          process_id: string
+          requer_assinatura: boolean
+          status: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          assinado_em?: string | null
+          categoria?: string
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          document_id?: string | null
+          employee_id: string
+          enviado_em?: string | null
+          file_url?: string | null
+          id?: string
+          obrigatorio?: boolean
+          process_id: string
+          requer_assinatura?: boolean
+          status?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          assinado_em?: string | null
+          categoria?: string
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          document_id?: string | null
+          employee_id?: string
+          enviado_em?: string | null
+          file_url?: string | null
+          id?: string
+          obrigatorio?: boolean
+          process_id?: string
+          requer_assinatura?: boolean
+          status?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admission_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admission_documents_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "employee_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admission_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admission_documents_process_id_fkey"
+            columns: ["process_id"]
+            isOneToOne: false
+            referencedRelation: "admission_processes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admission_processes: {
+        Row: {
+          company_id: string
+          concluido_em: string | null
+          concluido_por: string | null
+          created_at: string
+          created_by: string | null
+          data_prevista_inicio: string | null
+          employee_id: string
+          id: string
+          observacoes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          concluido_em?: string | null
+          concluido_por?: string | null
+          created_at?: string
+          created_by?: string | null
+          data_prevista_inicio?: string | null
+          employee_id: string
+          id?: string
+          observacoes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          concluido_em?: string | null
+          concluido_por?: string | null
+          created_at?: string
+          created_by?: string | null
+          data_prevista_inicio?: string | null
+          employee_id?: string
+          id?: string
+          observacoes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admission_processes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admission_processes_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
