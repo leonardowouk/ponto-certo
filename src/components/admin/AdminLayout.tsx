@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { 
   Clock, Users, CalendarDays, Wallet, LayoutDashboard,
-  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText, ListChecks, UserPlus, ClipboardCheck
+  Settings, LogOut, Loader2, Building2, Building, FileCheck, Shield, FileText, ListChecks, UserPlus, ClipboardCheck, Cake
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { CompanyProvider, useCompany } from '@/contexts/CompanyContext';
@@ -84,6 +84,7 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
     { id: 'employees', label: 'Colaboradores', icon: Users, href: '/admin/employees' },
+    { id: 'birthdays', label: 'Aniversários', icon: Cake, href: '/admin/birthdays' },
     { id: 'sectors', label: 'Setores', icon: Building2, href: '/admin/sectors' },
     { id: 'timesheet', label: 'Espelho de Ponto', icon: CalendarDays, href: '/admin/timesheet' },
     { id: 'corrections', label: 'Correções de Ponto', icon: ClipboardCheck, href: '/admin/corrections', badge: pendingCorrections },
