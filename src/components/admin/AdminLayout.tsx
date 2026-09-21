@@ -85,6 +85,7 @@ function AdminLayoutInner({ children, currentPage }: AdminLayoutProps) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
     { id: 'employees', label: 'Colaboradores', icon: Users, href: '/admin/employees' },
     { id: 'birthdays', label: 'Aniversários', icon: Cake, href: '/admin/birthdays' },
+    { id: 'admissions', label: 'Admissões', icon: UserPlus, href: '/admin/admissions' },
     { id: 'sectors', label: 'Setores', icon: Building2, href: '/admin/sectors' },
     { id: 'timesheet', label: 'Espelho de Ponto', icon: CalendarDays, href: '/admin/timesheet' },
     { id: 'corrections', label: 'Correções de Ponto', icon: ClipboardCheck, href: '/admin/corrections', badge: pendingCorrections },

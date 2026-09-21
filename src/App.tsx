@@ -10,6 +10,7 @@ import AdminDashboard from "./pages/admin/Dashboard";
 import Employees from "./pages/admin/Employees";
 import EmployeeDetail from "./pages/admin/EmployeeDetail";
 import Birthdays from "./pages/admin/Birthdays";
+import Admissions from "./pages/admin/Admissions";
 import Sectors from "./pages/admin/Sectors";
 import Timesheet from "./pages/admin/Timesheet";
 import HourBank from "./pages/admin/HourBank";
@@ -46,6 +47,7 @@ const AdminRoutes = () => (
       <Route path="/employees" element={<Employees />} />
       <Route path="/employees/:id" element={<EmployeeDetail />} />
       <Route path="/birthdays" element={<Birthdays />} />
+      <Route path="/admissions" element={<Admissions />} />
       <Route path="/sectors" element={<Sectors />} />
       <Route path="/timesheet" element={<Timesheet />} />
       <Route path="/hourbank" element={<HourBank />} />
