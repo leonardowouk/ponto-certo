@@ -28,11 +28,7 @@ export async function sendWhatsAppNotification({
 
       // If setting exists and is disabled, skip
       if (setting && !setting.is_enabled) return false;
-
-      // Pass custom template if available
-      if (setting?.message_template) {
-        variables._template = setting.message_template;
-      }
+      // The message template is resolved server-side by the edge function.
     }
 
     const { data, error } = await supabase.functions.invoke('send-whatsapp', {
