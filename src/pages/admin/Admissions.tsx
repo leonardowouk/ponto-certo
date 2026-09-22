@@ -18,7 +18,7 @@ import {
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { logAudit } from '@/lib/audit';
 import {
-  Plus, Loader2, FileText, CheckCircle2, Upload, Trash2, UserPlus,
+  Plus, Loader2, FileText, CheckCircle2, Upload, Trash2, UserPlus, Download, ExternalLink,
 } from 'lucide-react';
 
 interface Process {
@@ -41,6 +41,8 @@ interface AdmissionDoc {
   file_url: string | null;
   document_id: string | null;
   created_at: string;
+  arquivo_assinado_url?: string | null;
+  metodo?: string | null;
 }
 
 const fmtDate = (v?: string | null) =>
