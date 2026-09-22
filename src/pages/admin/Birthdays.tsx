@@ -119,6 +119,12 @@ export default function BirthdaysPage() {
     () => buildItems(rows, 'data_admissao', m).filter(i => i.years > 0),
     [rows, m],
   );
+  const allEmployees = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return rows
+      .filter(r => !term || r.nome.toLowerCase().includes(term))
+      .map(r => ({ ...r }));
+  }, [rows, search]);
 
   const renderList = (items: Item[], kind: 'nascimento' | 'empresa') => {
     if (items.length === 0) {
