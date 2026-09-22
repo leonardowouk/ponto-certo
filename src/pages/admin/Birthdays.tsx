@@ -181,6 +181,7 @@ export default function BirthdaysPage() {
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
         ) : (
+          <>
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
