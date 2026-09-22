@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getInternalSecret } from '../_shared/internalAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -431,7 +432,10 @@ Deno.serve(async (req) => {
         .select('id')
         .single();
 
-      if (resp?.id) evaluatePhotoAsync(supabaseUrl, serviceKey, resp.id);
+      if (resp?.id) {
+        const internalSecret = await getInternalSecret(supabase);
+        evaluatePhotoAsync(supabaseUrl, serviceKey, resp.id, internalSecret);
+      }
       await sendWpp(baseUrl, clientToken, phone, `📷 Foto do item ${itemNum} recebida. A IA está analisando — gestor confirma a aprovação no painel.`);
     }
 
