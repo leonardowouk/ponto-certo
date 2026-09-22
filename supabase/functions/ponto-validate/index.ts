@@ -321,8 +321,21 @@ serve(async (req) => {
       const timestamp = now.getTime();
       const selfieFileName = `${employee.id}/${dateStr}/${timestamp}.jpg`;
 
-      // Converter base64 para blob
-      const base64Data = selfie_image.replace(/^data:image\/\w+;base64,/, '');
+      // Validar e converter base64 para blob (apenas JPEG/PNG/WebP, até 5MB)
+      const selfieMatch = String(selfie_image || '').match(/^data:image\/(jpeg|jpg|png|webp);base64,/);
+      if (!selfieMatch) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Foto inválida' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const base64Data = String(selfie_image).slice(selfieMatch[0].length);
+      if (!/^[A-Za-z0-9+/=]+$/.test(base64Data) || (base64Data.length * 3) / 4 > 5 * 1024 * 1024) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Foto inválida ou muito grande (máx. 5MB)' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
 
       const { error: uploadError } = await supabase.storage
