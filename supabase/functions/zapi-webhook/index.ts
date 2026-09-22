@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getInternalSecret } from '../_shared/internalAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,13 +73,18 @@ function parseSimNao(v: string): boolean | null {
   return null;
 }
 
-async function evaluatePhotoAsync(supabaseUrl: string, serviceKey: string, respostaId: string) {
+async function evaluatePhotoAsync(
+  supabaseUrl: string,
+  _serviceKey: string,
+  respostaId: string,
+  internalSecret: string | null,
+) {
   // Fire-and-forget call to evaluate-checklist-photo
   fetch(`${supabaseUrl}/functions/v1/evaluate-checklist-photo`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${serviceKey}`,
+      ...(internalSecret ? { 'x-internal-secret': internalSecret } : {}),
     },
     body: JSON.stringify({ resposta_id: respostaId }),
   }).catch((e) => console.error('evaluate trigger error:', e));
@@ -383,11 +389,27 @@ Deno.serve(async (req) => {
         await sendWpp(baseUrl, clientToken, phone, `Erro ao baixar a foto. Tente novamente.`);
         return new Response('ok', { headers: corsHeaders });
       }
+      const contentType = (imgResp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+      const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
+        await sendWpp(baseUrl, clientToken, phone, `Formato de imagem não suportado. Envie uma foto JPG ou PNG.`);
+        return new Response('ok', { headers: corsHeaders });
+      }
+      const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+      const declaredLength = Number(imgResp.headers.get('content-length') || 0);
+      if (declaredLength > MAX_IMAGE_BYTES) {
+        await sendWpp(baseUrl, clientToken, phone, `Foto muito grande (máx. 10MB).`);
+        return new Response('ok', { headers: corsHeaders });
+      }
       const buf = new Uint8Array(await imgResp.arrayBuffer());
-      const ext = (imgResp.headers.get('content-type') || 'image/jpeg').includes('png') ? 'png' : 'jpg';
+      if (buf.byteLength > MAX_IMAGE_BYTES) {
+        await sendWpp(baseUrl, clientToken, phone, `Foto muito grande (máx. 10MB).`);
+        return new Response('ok', { headers: corsHeaders });
+      }
+      const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
       const path = `${integration.company_id}/${session.execucao_id}/${item.id}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('checklist_fotos').upload(path, buf, {
-        contentType: imgResp.headers.get('content-type') || 'image/jpeg',
+        contentType,
         upsert: true,
       });
       if (upErr) {
@@ -410,7 +432,10 @@ Deno.serve(async (req) => {
         .select('id')
         .single();
 
-      if (resp?.id) evaluatePhotoAsync(supabaseUrl, serviceKey, resp.id);
+      if (resp?.id) {
+        const internalSecret = await getInternalSecret(supabase);
+        evaluatePhotoAsync(supabaseUrl, serviceKey, resp.id, internalSecret);
+      }
       await sendWpp(baseUrl, clientToken, phone, `📷 Foto do item ${itemNum} recebida. A IA está analisando — gestor confirma a aprovação no painel.`);
     }
 

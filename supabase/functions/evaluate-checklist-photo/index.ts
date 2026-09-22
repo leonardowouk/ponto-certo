@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { encodeBase64 } from 'https://deno.land/std@0.224.0/encoding/base64.ts';
+import { requireInternalCaller, getInternalSecret } from '../_shared/internalAuth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,13 +11,16 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { resposta_id } = await req.json();
-    if (!resposta_id) throw new Error('resposta_id é obrigatório');
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
+
+    const denied = await requireInternalCaller(req, supabase, corsHeaders);
+    if (denied) return denied;
+
+    const { resposta_id } = await req.json();
+    if (!resposta_id) throw new Error('resposta_id é obrigatório');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY não configurado');
 
@@ -129,11 +133,12 @@ Deno.serve(async (req) => {
     // Notify Admin/RH via WhatsApp when AI reproves (fire-and-forget)
     if (status_ia === 'reprovado') {
       try {
+        const internalSecret = await getInternalSecret(supabase);
         await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-checklist-reprovacao`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            ...(internalSecret ? { 'x-internal-secret': internalSecret } : {}),
           },
           body: JSON.stringify({ resposta_id }),
         });

@@ -22,6 +22,23 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+    // Only the signed-in owner of the signature may request its code
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userData?.user) {
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { employee_id, signature_id } = body;
 
@@ -32,12 +49,36 @@ serve(async (req) => {
       );
     }
 
-    // Get employee email
+    // Get employee email (must be the caller's own employee record)
     const { data: emp } = await supabase
       .from('employees')
       .select('email, nome')
       .eq('id', employee_id)
-      .single();
+      .eq('auth_user_id', userData.user.id)
+      .maybeSingle();
+
+    if (!emp) {
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      );
+    }
+
+    // The signature must belong to this employee and still be pending
+    const { data: sig } = await supabase
+      .from('document_signatures')
+      .select('id, status')
+      .eq('id', signature_id)
+      .eq('employee_id', employee_id)
+      .maybeSingle();
+
+    if (!sig || sig.status !== 'pendente') {
+      return new Response(
+        JSON.stringify({ error: 'Assinatura inválida' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+      );
+    }
+
 
     if (!emp?.email) {
       return new Response(

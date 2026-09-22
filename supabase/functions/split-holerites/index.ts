@@ -98,6 +98,21 @@ async function saveSinglePage(
   return docData?.id;
 }
 
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
+
+/** Returns a map of employee id -> nome for employees that belong to the company. */
+// deno-lint-ignore no-explicit-any
+async function loadCompanyEmployees(supabase: any, companyId: string, ids: string[]) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map<string, string>();
+  const { data } = await supabase
+    .from('employees')
+    .select('id, nome')
+    .eq('company_id', companyId)
+    .in('id', unique);
+  return new Map<string, string>((data || []).map((e: any) => [e.id, e.nome]));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -166,11 +181,22 @@ serve(async (req) => {
         const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
         const results: Array<{ page: number; status: string; document_id?: string; error?: string }> = [];
 
+        // Every assignment must point to an employee of this company
+        const empMap = await loadCompanyEmployees(
+          supabase,
+          company_id,
+          assignments.map((a: any) => a.employee_id),
+        );
+        const invalid = assignments.filter((a: any) => !empMap.has(a.employee_id));
+        if (invalid.length > 0) {
+          return new Response(JSON.stringify({ error: 'Colaborador fora desta empresa.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
         for (const assignment of assignments) {
           try {
             const docId = await saveSinglePage(
               supabase, pdfBytes, assignment.page - 1,
-              { id: assignment.employee_id, nome: assignment.employee_name },
+              { id: assignment.employee_id, nome: empMap.get(assignment.employee_id) || '' },
               company_id, ref_month, docTitle || 'Holerite',
               requires_signature !== false, user.id,
             );
@@ -231,9 +257,14 @@ serve(async (req) => {
 
       const pdfBytes = new Uint8Array(await fileData.arrayBuffer());
 
+      const empMap = await loadCompanyEmployees(supabase, company_id, [employee_id]);
+      if (!empMap.has(employee_id)) {
+        return new Response(JSON.stringify({ error: 'Colaborador fora desta empresa.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
       const docId = await saveSinglePage(
         supabase, pdfBytes, page - 1,
-        { id: employee_id, nome: employee_name || '' },
+        { id: employee_id, nome: empMap.get(employee_id) || '' },
         company_id, ref_month, docTitle || 'Holerite',
         requires_signature !== false, user.id,
       );
@@ -265,7 +296,20 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[split-holerites] Processing PDF: ${file.name}, size: ${file.size}, dryRun: ${dryRun}`);
+    if (file.type && file.type !== 'application/pdf') {
+      return new Response(
+        JSON.stringify({ error: 'Envie um arquivo PDF.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      return new Response(
+        JSON.stringify({ error: 'Arquivo muito grande (máx. 25MB).' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`[split-holerites] Processing PDF, size: ${file.size}, dryRun: ${dryRun}`);
 
     const pdfBytes = new Uint8Array(await file.arrayBuffer());
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -333,7 +377,6 @@ IMPORTANTE: Retorne SOMENTE o JSON, sem markdown, sem explicação, sem \`\`\`.`
     if (aiResponse.ok) {
       const aiData = await aiResponse.json();
       const content = aiData.choices?.[0]?.message?.content?.trim() || '';
-      console.log(`[split-holerites] AI response: ${content.substring(0, 500)}`);
 
       try {
         const cleaned = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
@@ -343,7 +386,7 @@ IMPORTANTE: Retorne SOMENTE o JSON, sem markdown, sem explicação, sem \`\`\`.`
       }
     } else {
       const errText = await aiResponse.text();
-      console.error(`[split-holerites] AI error ${aiResponse.status}: ${errText.substring(0, 500)}`);
+      console.error(`[split-holerites] AI error ${aiResponse.status}`, errText.length);
     }
 
     const results: Array<{

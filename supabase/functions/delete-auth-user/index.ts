@@ -79,9 +79,57 @@ serve(async (req) => {
     const user = users.users.find((u) => u.email === email);
 
     if (!user) {
-      console.info("[delete-auth-user] User not found", { caller_id: caller.id, email });
+      console.info("[delete-auth-user] User not found", { caller_id: caller.id });
       return json({ success: true, message: "Usuário não encontrado no auth" });
     }
+
+    if (user.id === caller.id) {
+      return json({ error: "Você não pode remover a si mesmo" }, 400);
+    }
+
+    const isSuperAdmin = roles.some((r) => r.role === "super_admin");
+
+    if (!isSuperAdmin) {
+      // Target must never be a super admin
+      const { data: targetRoles } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+      if ((targetRoles ?? []).some((r) => r.role === "super_admin")) {
+        return json({ error: "Acesso negado" }, 403);
+      }
+
+      // Target must belong to one of the caller's companies
+      const { data: callerCompanies } = await supabaseAdmin.rpc("get_user_company_ids", {
+        _user_id: caller.id,
+      });
+      const allowed = new Set(
+        (callerCompanies ?? []).map((c: unknown) =>
+          typeof c === "string" ? c : (c as Record<string, string>).get_user_company_ids,
+        ),
+      );
+
+      const { data: targetEmployees } = await supabaseAdmin
+        .from("employees")
+        .select("company_id")
+        .eq("auth_user_id", user.id);
+      const { data: targetAccess } = await supabaseAdmin
+        .from("user_company_access")
+        .select("company_id")
+        .eq("user_id", user.id);
+
+      const targetCompanies = [
+        ...(targetEmployees ?? []).map((e) => e.company_id),
+        ...(targetAccess ?? []).map((a) => a.company_id),
+      ].filter(Boolean);
+
+      const shares = targetCompanies.some((cid) => allowed.has(cid));
+      if (!shares) {
+        console.warn("[delete-auth-user] Out-of-scope deletion attempt", { caller_id: caller.id });
+        return json({ error: "Usuário fora do seu escopo de empresa" }, 403);
+      }
+    }
+
 
     // Deletar usuário
     const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);

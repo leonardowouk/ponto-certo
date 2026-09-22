@@ -25,9 +25,23 @@ function normalizeCpf(cpf: unknown) {
   return String(cpf || '').replace(/\D/g, '').slice(0, 11);
 }
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 function decodeImage(image: string) {
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
   return Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+}
+
+/** Accept only JPEG/PNG/WebP data URLs within the size limit. */
+function validateImage(image: string): string | null {
+  const match = image.match(/^data:(image\/(jpeg|jpg|png|webp));base64,/);
+  if (!match) return 'Foto inválida.';
+  const base64Data = image.slice(match[0].length);
+  if (!/^[A-Za-z0-9+/=]+$/.test(base64Data)) return 'Foto inválida.';
+  const approxBytes = Math.floor((base64Data.length * 3) / 4);
+  if (approxBytes === 0) return 'Foto inválida.';
+  if (approxBytes > MAX_IMAGE_BYTES) return 'Foto muito grande (máx. 5MB).';
+  return null;
 }
 
 serve(async (req) => {
@@ -50,8 +64,9 @@ serve(async (req) => {
     if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) {
       return json({ success: false, message: 'CPF inválido.' }, 400);
     }
-    if (!selfieImage.startsWith('data:image/')) {
-      return json({ success: false, message: 'Foto inválida.' }, 400);
+    const imageError = validateImage(selfieImage);
+    if (imageError) {
+      return json({ success: false, message: imageError }, 400);
     }
     if (!deviceSecret) {
       return json({ success: false, message: 'Dispositivo inválido.' }, 400);
@@ -70,11 +85,12 @@ serve(async (req) => {
       return json({ success: false, message: 'Erro ao validar dispositivo.' }, 500);
     }
 
-    let companyId = device?.company_id || null;
-    if (!companyId) {
-      const { data: companies } = await supabase.from('companies').select('id').eq('ativo', true).limit(2);
-      if (companies?.length === 1) companyId = companies[0].id;
+    if (!device) {
+      return json({ success: false, message: 'Dispositivo inválido.' }, 401);
     }
+
+    // The company always comes from the authenticated device — never inferred.
+    const companyId = device.company_id;
 
     if (!companyId) {
       return json({ success: false, message: 'Configure a empresa deste dispositivo antes de registrar extras.' }, 400);
