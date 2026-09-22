@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Cake, Award, Loader2 } from 'lucide-react';
+import { Cake, Award, Loader2, Users, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 interface Row {
   id: string;
@@ -64,6 +65,29 @@ function buildItems(rows: Row[], field: 'data_nascimento' | 'data_admissao', mon
     })
     .filter(i => i.month === month)
     .sort((a, b) => a.day - b.day);
+}
+
+/** Formata 'YYYY-MM-DD' como dd/mm sem deslocamento de fuso. */
+function formatDM(value: string | null) {
+  if (!value) return '—';
+  const { day, month } = parseDate(value);
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
+}
+
+/** Tempo de empresa em anos e meses a partir de 'YYYY-MM-DD'. */
+function tenureText(admissao: string | null) {
+  if (!admissao) return '—';
+  const { year, month, day } = parseDate(admissao);
+  const start = new Date(year, month - 1, day);
+  const now = new Date();
+  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) months -= 1;
+  if (months < 0) return '—';
+  const y = Math.floor(months / 12);
+  const m = months % 12;
+  if (y === 0) return m === 0 ? '< 1 mês' : `${m} ${m === 1 ? 'mês' : 'meses'}`;
+  if (m === 0) return `${y} ${y === 1 ? 'ano' : 'anos'}`;
+  return `${y} a ${m} m`;
 }
 
 export default function BirthdaysPage() {
