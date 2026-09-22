@@ -105,18 +105,24 @@ export default function AdmissionsPage() {
       // Sincroniza status com as assinaturas existentes
       const docIds = (docs || []).map(d => d.document_id).filter(Boolean) as string[];
       let signed = new Set<string>();
+      const sigInfo = new Map<string, { metodo: string | null; arquivo: string | null }>();
       if (docIds.length > 0) {
         const { data: sigs } = await supabase
           .from('document_signatures')
-          .select('document_id, status')
+          .select('document_id, status, metodo, arquivo_assinado_url')
           .in('document_id', docIds);
         signed = new Set((sigs || []).filter(s => s.status === 'assinado').map(s => s.document_id));
+        (sigs || []).forEach((s: any) =>
+          sigInfo.set(s.document_id, { metodo: s.metodo ?? null, arquivo: s.arquivo_assinado_url ?? null }));
       }
 
       const grouped: Record<string, AdmissionDoc[]> = {};
       for (const d of docs || []) {
         const status = d.document_id && signed.has(d.document_id) ? 'assinado' : d.status;
-        (grouped[d.process_id] ||= []).push({ ...d, status });
+        const info = d.document_id ? sigInfo.get(d.document_id) : undefined;
+        (grouped[d.process_id] ||= []).push({
+          ...d, status, metodo: info?.metodo ?? null, arquivo_assinado_url: info?.arquivo ?? null,
+        });
       }
       setDocsByProcess(grouped);
     } else {
