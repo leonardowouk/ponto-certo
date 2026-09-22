@@ -15,6 +15,13 @@
       "when": 1790026150662,
       "tag": "0001_rh_fase2_admissao_digital",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790082281898,
+      "tag": "0002_internal_job_secret_and_audit_policy",
+      "breakpoints": true
     }
   ]
 }
