@@ -430,7 +430,24 @@ export default function AdmissionsPage() {
                     <p className="text-xs text-muted-foreground">
                       {d.obrigatorio ? 'Obrigatório' : 'Opcional'}
                       {d.requer_assinatura ? ' · exige assinatura' : ''}
+                      {d.metodo === 'govbr' ? ' · assinado no gov.br' : ''}
                     </p>
+                    {d.arquivo_assinado_url && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadSigned(d.arquivo_assinado_url!, d.titulo)}
+                        >
+                          <Download className="w-3 h-3 mr-1" /> Arquivo assinado
+                        </Button>
+                        <a href="https://validar.iti.gov.br" target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="sm">
+                            <ExternalLink className="w-3 h-3 mr-1" /> Conferir no validador oficial
+                          </Button>
+                        </a>
+                      </div>
+                    )}
                   </div>
                   <StatusBadge status={d.status} />
                   <Button variant="ghost" size="icon" onClick={() => removeDoc(d)}>
