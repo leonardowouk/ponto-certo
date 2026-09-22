@@ -95,6 +95,7 @@ export default function BirthdaysPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     const load = async () => {
