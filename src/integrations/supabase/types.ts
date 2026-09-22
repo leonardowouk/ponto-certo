@@ -759,12 +759,16 @@ export type Database = {
       document_signatures: {
         Row: {
           acceptance_text: string | null
+          arquivo_assinado_hash: string | null
+          arquivo_assinado_nome: string | null
+          arquivo_assinado_url: string | null
           created_at: string | null
           document_hash: string | null
           document_id: string
           employee_id: string
           id: string
           ip_address: string | null
+          metodo: string
           notes: string | null
           pin_verified: boolean | null
           selfie_url: string | null
@@ -775,12 +779,16 @@ export type Database = {
         }
         Insert: {
           acceptance_text?: string | null
+          arquivo_assinado_hash?: string | null
+          arquivo_assinado_nome?: string | null
+          arquivo_assinado_url?: string | null
           created_at?: string | null
           document_hash?: string | null
           document_id: string
           employee_id: string
           id?: string
           ip_address?: string | null
+          metodo?: string
           notes?: string | null
           pin_verified?: boolean | null
           selfie_url?: string | null
@@ -791,12 +799,16 @@ export type Database = {
         }
         Update: {
           acceptance_text?: string | null
+          arquivo_assinado_hash?: string | null
+          arquivo_assinado_nome?: string | null
+          arquivo_assinado_url?: string | null
           created_at?: string | null
           document_hash?: string | null
           document_id?: string
           employee_id?: string
           id?: string
           ip_address?: string | null
+          metodo?: string
           notes?: string | null
           pin_verified?: boolean | null
           selfie_url?: string | null
@@ -1590,6 +1602,7 @@ export type Database = {
         Row: {
           acceptance_text: string | null
           action: string
+          arquivo_assinado_hash: string | null
           auth_user_id: string | null
           created_at: string
           document_hash: string | null
@@ -1597,6 +1610,7 @@ export type Database = {
           employee_id: string
           id: string
           ip_address: string | null
+          metodo: string | null
           pin_verified: boolean | null
           selfie_url: string | null
           signature_id: string
@@ -1606,6 +1620,7 @@ export type Database = {
         Insert: {
           acceptance_text?: string | null
           action: string
+          arquivo_assinado_hash?: string | null
           auth_user_id?: string | null
           created_at?: string
           document_hash?: string | null
@@ -1613,6 +1628,7 @@ export type Database = {
           employee_id: string
           id?: string
           ip_address?: string | null
+          metodo?: string | null
           pin_verified?: boolean | null
           selfie_url?: string | null
           signature_id: string
@@ -1622,6 +1638,7 @@ export type Database = {
         Update: {
           acceptance_text?: string | null
           action?: string
+          arquivo_assinado_hash?: string | null
           auth_user_id?: string | null
           created_at?: string
           document_hash?: string | null
@@ -1629,6 +1646,7 @@ export type Database = {
           employee_id?: string
           id?: string
           ip_address?: string | null
+          metodo?: string | null
           pin_verified?: boolean | null
           selfie_url?: string | null
           signature_id?: string
