@@ -266,6 +266,22 @@ export default function AdmissionsPage() {
     load();
   };
 
+  const downloadSigned = async (path: string, titulo: string) => {
+    const { data, error } = await supabase.storage.from('documentos').download(path);
+    if (error || !data) {
+      toast({ title: 'Erro ao baixar arquivo', description: error?.message, variant: 'destructive' });
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titulo.replace(/[^\w\s-]/g, '')}-assinado.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
   const pendingRequired = (processId: string) =>
     (docsByProcess[processId] || []).filter(d => d.obrigatorio && d.status !== 'assinado');
 
