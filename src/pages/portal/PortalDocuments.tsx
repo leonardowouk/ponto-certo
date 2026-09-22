@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { SignatureSelfieCapture } from '@/components/signature/SignatureSelfieCapture';
+import { GovBrSignDialog } from '@/components/portal/GovBrSignDialog';
 
 interface DocItem {
   id: string;
