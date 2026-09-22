@@ -133,11 +133,12 @@ Deno.serve(async (req) => {
     // Notify Admin/RH via WhatsApp when AI reproves (fire-and-forget)
     if (status_ia === 'reprovado') {
       try {
+        const internalSecret = await getInternalSecret(supabase);
         await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/notify-checklist-reprovacao`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            ...(internalSecret ? { 'x-internal-secret': internalSecret } : {}),
           },
           body: JSON.stringify({ resposta_id }),
         });
