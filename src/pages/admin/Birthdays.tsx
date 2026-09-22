@@ -260,6 +260,7 @@ export default function BirthdaysPage() {
               )}
             </CardContent>
           </Card>
+          </>
         )}
 
         <p className="text-xs text-muted-foreground">
