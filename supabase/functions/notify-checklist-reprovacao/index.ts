@@ -33,6 +33,14 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+
+    const denied = await requireInternalCaller(req, supabase, corsHeaders);
+    if (denied) return denied;
+
     const { resposta_id } = await req.json();
     if (!resposta_id) {
       return new Response(JSON.stringify({ ok: false, error: 'resposta_id required' }), {
@@ -40,11 +48,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
 
     // Load context
     const { data: r } = await supabase
