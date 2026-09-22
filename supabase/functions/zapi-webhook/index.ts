@@ -388,11 +388,27 @@ Deno.serve(async (req) => {
         await sendWpp(baseUrl, clientToken, phone, `Erro ao baixar a foto. Tente novamente.`);
         return new Response('ok', { headers: corsHeaders });
       }
+      const contentType = (imgResp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+      const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
+        await sendWpp(baseUrl, clientToken, phone, `Formato de imagem não suportado. Envie uma foto JPG ou PNG.`);
+        return new Response('ok', { headers: corsHeaders });
+      }
+      const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+      const declaredLength = Number(imgResp.headers.get('content-length') || 0);
+      if (declaredLength > MAX_IMAGE_BYTES) {
+        await sendWpp(baseUrl, clientToken, phone, `Foto muito grande (máx. 10MB).`);
+        return new Response('ok', { headers: corsHeaders });
+      }
       const buf = new Uint8Array(await imgResp.arrayBuffer());
-      const ext = (imgResp.headers.get('content-type') || 'image/jpeg').includes('png') ? 'png' : 'jpg';
+      if (buf.byteLength > MAX_IMAGE_BYTES) {
+        await sendWpp(baseUrl, clientToken, phone, `Foto muito grande (máx. 10MB).`);
+        return new Response('ok', { headers: corsHeaders });
+      }
+      const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
       const path = `${integration.company_id}/${session.execucao_id}/${item.id}-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('checklist_fotos').upload(path, buf, {
-        contentType: imgResp.headers.get('content-type') || 'image/jpeg',
+        contentType,
         upsert: true,
       });
       if (upErr) {
