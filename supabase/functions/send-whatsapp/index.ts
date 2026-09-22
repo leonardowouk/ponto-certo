@@ -33,6 +33,50 @@ async function sendMessage(baseUrl: string, clientToken: string | null, phone: s
   return data;
 }
 
+const TEMPLATE_KEYS: Record<string, string> = {
+  notify_document: 'new_document',
+  notify_correction_approved: 'correction_approved',
+  notify_correction_rejected: 'correction_rejected',
+  notify_closing: 'monthly_closing',
+  notify_certificate: 'certificate_received',
+};
+
+// Templates are always resolved server-side; callers cannot inject message bodies.
+async function resolveTemplate(
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin: any,
+  companyId: string,
+  action: string,
+  fallback: string,
+): Promise<string> {
+  const key = TEMPLATE_KEYS[action];
+  if (!key) return fallback;
+  const { data } = await supabaseAdmin
+    .from('notification_settings')
+    .select('message_template')
+    .eq('company_id', companyId)
+    .eq('notification_type', key)
+    .maybeSingle();
+  return data?.message_template || fallback;
+}
+
+// deno-lint-ignore no-explicit-any
+async function loadCompanyEmployee(supabaseAdmin: any, companyId: string, employeeId: string) {
+  const { data } = await supabaseAdmin
+    .from('employees')
+    .select('nome, telefone')
+    .eq('id', employeeId)
+    .eq('company_id', companyId)
+    .maybeSingle();
+  return data;
+}
+
+function isValidPhone(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 10 && digits.length <= 15;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -42,7 +86,7 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json();
-    const { company_id, action, phone, message, employee_id, _template } = body;
+    const { company_id, action, phone, message, employee_id } = body;
 
     if (!company_id) throw new Error('company_id é obrigatório');
 
@@ -105,7 +149,10 @@ Deno.serve(async (req) => {
 
     // Send raw message
     if (action === 'send') {
-      if (!phone || !message) throw new Error('phone e message são obrigatórios');
+      if (!isValidPhone(phone)) throw new Error('Telefone inválido');
+      if (typeof message !== 'string' || message.trim().length === 0 || message.length > 4096) {
+        throw new Error('Mensagem inválida');
+      }
       const data = await sendMessage(baseUrl, integration.client_token, phone, message);
       return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -116,13 +163,8 @@ Deno.serve(async (req) => {
     if (action === 'notify_document') {
       if (!employee_id) throw new Error('employee_id é obrigatório');
 
-      const { data: emp } = await supabaseAdmin
-        .from('employees')
-        .select('nome, telefone')
-        .eq('id', employee_id)
-        .single();
-
-      if (!emp) throw new Error('Colaborador não encontrado');
+      const emp = await loadCompanyEmployee(supabaseAdmin, company_id, employee_id);
+      if (!emp) throw new Error('Colaborador não encontrado nesta empresa');
       if (!emp.telefone) {
         return new Response(JSON.stringify({ success: false, error: 'Colaborador sem telefone cadastrado' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -131,7 +173,7 @@ Deno.serve(async (req) => {
 
       const docTitle = body.document_title || 'Novo documento';
       const defaultMsg = `📄 Olá {nome}! Você tem um novo documento disponível: *{documento}*. Acesse o Portal do Colaborador para visualizar e assinar.`;
-      const template = _template || defaultMsg;
+      const template = await resolveTemplate(supabaseAdmin, company_id, action, defaultMsg);
       const msg = applyTemplate(template, { nome: emp.nome, documento: docTitle });
 
       const data = await sendMessage(baseUrl, integration.client_token, emp.telefone, msg);
@@ -144,13 +186,8 @@ Deno.serve(async (req) => {
     if (action === 'notify_correction_approved' || action === 'notify_correction_rejected') {
       if (!employee_id) throw new Error('employee_id é obrigatório');
 
-      const { data: emp } = await supabaseAdmin
-        .from('employees')
-        .select('nome, telefone')
-        .eq('id', employee_id)
-        .single();
-
-      if (!emp) throw new Error('Colaborador não encontrado');
+      const emp = await loadCompanyEmployee(supabaseAdmin, company_id, employee_id);
+      if (!emp) throw new Error('Colaborador não encontrado nesta empresa');
       if (!emp.telefone) {
         return new Response(JSON.stringify({ success: false, error: 'Colaborador sem telefone cadastrado' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -164,7 +201,7 @@ Deno.serve(async (req) => {
       const defaultRejected = `❌ Olá {nome}! Sua solicitação de correção de ponto do dia {data} foi *rejeitada*. Motivo: {motivo}`;
       
       const defaultMsg = action === 'notify_correction_approved' ? defaultApproved : defaultRejected;
-      const template = _template || defaultMsg;
+      const template = await resolveTemplate(supabaseAdmin, company_id, action, defaultMsg);
       const msg = applyTemplate(template, { nome: emp.nome, data: workDate, motivo });
 
       const data = await sendMessage(baseUrl, integration.client_token, emp.telefone, msg);
@@ -177,13 +214,8 @@ Deno.serve(async (req) => {
     if (action === 'notify_closing') {
       if (!employee_id) throw new Error('employee_id é obrigatório');
 
-      const { data: emp } = await supabaseAdmin
-        .from('employees')
-        .select('nome, telefone')
-        .eq('id', employee_id)
-        .single();
-
-      if (!emp) throw new Error('Colaborador não encontrado');
+      const emp = await loadCompanyEmployee(supabaseAdmin, company_id, employee_id);
+      if (!emp) throw new Error('Colaborador não encontrado nesta empresa');
       if (!emp.telefone) {
         return new Response(JSON.stringify({ success: false, error: 'Colaborador sem telefone cadastrado' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -192,7 +224,7 @@ Deno.serve(async (req) => {
 
       const mes = body.ref_month_label || '';
       const defaultMsg = `📊 Olá {nome}! Seu espelho de ponto de *{mes}* está disponível para conferência no Portal do Colaborador.`;
-      const template = _template || defaultMsg;
+      const template = await resolveTemplate(supabaseAdmin, company_id, action, defaultMsg);
       const msg = applyTemplate(template, { nome: emp.nome, mes });
 
       const data = await sendMessage(baseUrl, integration.client_token, emp.telefone, msg);
@@ -203,18 +235,24 @@ Deno.serve(async (req) => {
 
     // Notify certificate received (to RH)
     if (action === 'notify_certificate') {
-      const employeeName = body.employee_name || 'Colaborador';
       const refDate = body.ref_date || '';
       const rhPhone = body.rh_phone;
 
-      if (!rhPhone) {
-        return new Response(JSON.stringify({ success: false, error: 'Telefone do RH não informado' }), {
+      if (!isValidPhone(rhPhone)) {
+        return new Response(JSON.stringify({ success: false, error: 'Telefone do RH inválido' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
+      let employeeName = 'Colaborador';
+      if (employee_id) {
+        const emp = await loadCompanyEmployee(supabaseAdmin, company_id, employee_id);
+        if (!emp) throw new Error('Colaborador não encontrado nesta empresa');
+        employeeName = emp.nome;
+      }
+
       const defaultMsg = `🏥 Novo atestado recebido de *{nome}* para o dia {data}. Acesse o painel para verificar.`;
-      const template = _template || defaultMsg;
+      const template = await resolveTemplate(supabaseAdmin, company_id, action, defaultMsg);
       const msg = applyTemplate(template, { nome: employeeName, data: refDate });
 
       const data = await sendMessage(baseUrl, integration.client_token, rhPhone, msg);
