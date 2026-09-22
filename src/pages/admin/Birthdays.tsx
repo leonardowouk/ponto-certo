@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Cake, Award, Loader2 } from 'lucide-react';
+import { Cake, Award, Loader2, Users, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 interface Row {
   id: string;
@@ -66,11 +67,35 @@ function buildItems(rows: Row[], field: 'data_nascimento' | 'data_admissao', mon
     .sort((a, b) => a.day - b.day);
 }
 
+/** Formata 'YYYY-MM-DD' como dd/mm sem deslocamento de fuso. */
+function formatDM(value: string | null) {
+  if (!value) return '—';
+  const { day, month } = parseDate(value);
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
+}
+
+/** Tempo de empresa em anos e meses a partir de 'YYYY-MM-DD'. */
+function tenureText(admissao: string | null) {
+  if (!admissao) return '—';
+  const { year, month, day } = parseDate(admissao);
+  const start = new Date(year, month - 1, day);
+  const now = new Date();
+  let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) months -= 1;
+  if (months < 0) return '—';
+  const y = Math.floor(months / 12);
+  const m = months % 12;
+  if (y === 0) return m === 0 ? '< 1 mês' : `${m} ${m === 1 ? 'mês' : 'meses'}`;
+  if (m === 0) return `${y} ${y === 1 ? 'ano' : 'anos'}`;
+  return `${y} a ${m} m`;
+}
+
 export default function BirthdaysPage() {
   const { selectedCompanyId } = useCompany();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -94,6 +119,12 @@ export default function BirthdaysPage() {
     () => buildItems(rows, 'data_admissao', m).filter(i => i.years > 0),
     [rows, m],
   );
+  const allEmployees = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return rows
+      .filter(r => !term || r.nome.toLowerCase().includes(term))
+      .map(r => ({ ...r }));
+  }, [rows, search]);
 
   const renderList = (items: Item[], kind: 'nascimento' | 'empresa') => {
     if (items.length === 0) {
@@ -150,6 +181,7 @@ export default function BirthdaysPage() {
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
         ) : (
+          <>
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
@@ -171,6 +203,64 @@ export default function BirthdaysPage() {
               <CardContent>{renderList(anniversaries, 'empresa')}</CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader className="gap-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Users className="w-4 h-4 text-primary" />
+                Todos os colaboradores ({allEmployees.length})
+              </CardTitle>
+              <div className="relative max-w-sm">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar por nome..."
+                  className="pl-9"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {allEmployees.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  {search ? 'Nenhum colaborador encontrado.' : 'Nenhum colaborador ativo.'}
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="py-2.5 px-6 font-medium">Colaborador</th>
+                        <th className="py-2.5 px-4 font-medium">Aniversário</th>
+                        <th className="py-2.5 px-4 font-medium">Admissão</th>
+                        <th className="py-2.5 px-4 font-medium">Tempo de empresa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {allEmployees.map(r => (
+                        <tr key={r.id} className="hover:bg-muted/40">
+                          <td className="py-2.5 px-6">
+                            <p className="font-medium truncate">{r.nome}</p>
+                            <p className="text-xs text-muted-foreground truncate">{r.cargo || '—'}</p>
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            {formatDM(r.data_nascimento)}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            {formatDM(r.data_admissao)}
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            {tenureText(r.data_admissao)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          </>
         )}
 
         <p className="text-xs text-muted-foreground">
