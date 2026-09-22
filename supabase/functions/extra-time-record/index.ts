@@ -85,11 +85,12 @@ serve(async (req) => {
       return json({ success: false, message: 'Erro ao validar dispositivo.' }, 500);
     }
 
-    let companyId = device?.company_id || null;
-    if (!companyId) {
-      const { data: companies } = await supabase.from('companies').select('id').eq('ativo', true).limit(2);
-      if (companies?.length === 1) companyId = companies[0].id;
+    if (!device) {
+      return json({ success: false, message: 'Dispositivo inválido.' }, 401);
     }
+
+    // The company always comes from the authenticated device — never inferred.
+    const companyId = device.company_id;
 
     if (!companyId) {
       return json({ success: false, message: 'Configure a empresa deste dispositivo antes de registrar extras.' }, 400);
