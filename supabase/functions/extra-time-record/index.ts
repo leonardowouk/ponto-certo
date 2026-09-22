@@ -25,9 +25,23 @@ function normalizeCpf(cpf: unknown) {
   return String(cpf || '').replace(/\D/g, '').slice(0, 11);
 }
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
 function decodeImage(image: string) {
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
   return Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+}
+
+/** Accept only JPEG/PNG/WebP data URLs within the size limit. */
+function validateImage(image: string): string | null {
+  const match = image.match(/^data:(image\/(jpeg|jpg|png|webp));base64,/);
+  if (!match) return 'Foto inválida.';
+  const base64Data = image.slice(match[0].length);
+  if (!/^[A-Za-z0-9+/=]+$/.test(base64Data)) return 'Foto inválida.';
+  const approxBytes = Math.floor((base64Data.length * 3) / 4);
+  if (approxBytes === 0) return 'Foto inválida.';
+  if (approxBytes > MAX_IMAGE_BYTES) return 'Foto muito grande (máx. 5MB).';
+  return null;
 }
 
 serve(async (req) => {
