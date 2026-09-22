@@ -72,13 +72,18 @@ function parseSimNao(v: string): boolean | null {
   return null;
 }
 
-async function evaluatePhotoAsync(supabaseUrl: string, serviceKey: string, respostaId: string) {
+async function evaluatePhotoAsync(
+  supabaseUrl: string,
+  _serviceKey: string,
+  respostaId: string,
+  internalSecret: string | null,
+) {
   // Fire-and-forget call to evaluate-checklist-photo
   fetch(`${supabaseUrl}/functions/v1/evaluate-checklist-photo`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${serviceKey}`,
+      ...(internalSecret ? { 'x-internal-secret': internalSecret } : {}),
     },
     body: JSON.stringify({ resposta_id: respostaId }),
   }).catch((e) => console.error('evaluate trigger error:', e));
