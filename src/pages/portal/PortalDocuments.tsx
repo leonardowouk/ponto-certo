@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { SignatureSelfieCapture } from '@/components/signature/SignatureSelfieCapture';
+import { GovBrSignDialog } from '@/components/portal/GovBrSignDialog';
 
 interface DocItem {
   id: string;
@@ -48,6 +49,7 @@ export default function PortalDocuments() {
   const [signing, setSigning] = useState(false);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState('');
+  const [govbrDoc, setGovbrDoc] = useState<DocItem | null>(null);
 
   // Signing flow state
   const [step, setStep] = useState<SignStep>('review');
@@ -231,8 +233,11 @@ export default function PortalDocuments() {
                           <Button size="sm" variant="outline" onClick={() => handleView(doc.file_url)}>
                             <Eye className="w-3 h-3 mr-1" /> Ver
                           </Button>
-                          <Button size="sm" onClick={() => setSigningDoc(doc)}>
-                            <CheckCircle2 className="w-3 h-3 mr-1" /> Assinar
+                          <Button size="sm" onClick={() => setGovbrDoc(doc)}>
+                            <ShieldCheck className="w-3 h-3 mr-1" /> Assinar com gov.br
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => setSigningDoc(doc)}>
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Aceite com PIN
                           </Button>
                         </div>
                       </TableCell>
@@ -453,6 +458,12 @@ export default function PortalDocuments() {
           </div>
         </DialogContent>
       </Dialog>
+      <GovBrSignDialog
+        open={!!govbrDoc}
+        onOpenChange={(o) => { if (!o) setGovbrDoc(null); }}
+        doc={govbrDoc}
+        onSigned={loadDocs}
+      />
     </PortalLayout>
   );
 }

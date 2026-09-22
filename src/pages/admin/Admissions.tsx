@@ -18,7 +18,7 @@ import {
 import { StatusBadge } from '@/components/admin/StatusBadge';
 import { logAudit } from '@/lib/audit';
 import {
-  Plus, Loader2, FileText, CheckCircle2, Upload, Trash2, UserPlus,
+  Plus, Loader2, FileText, CheckCircle2, Upload, Trash2, UserPlus, Download, ExternalLink,
 } from 'lucide-react';
 
 interface Process {
@@ -41,6 +41,8 @@ interface AdmissionDoc {
   file_url: string | null;
   document_id: string | null;
   created_at: string;
+  arquivo_assinado_url?: string | null;
+  metodo?: string | null;
 }
 
 const fmtDate = (v?: string | null) =>
@@ -103,18 +105,24 @@ export default function AdmissionsPage() {
       // Sincroniza status com as assinaturas existentes
       const docIds = (docs || []).map(d => d.document_id).filter(Boolean) as string[];
       let signed = new Set<string>();
+      const sigInfo = new Map<string, { metodo: string | null; arquivo: string | null }>();
       if (docIds.length > 0) {
         const { data: sigs } = await supabase
           .from('document_signatures')
-          .select('document_id, status')
+          .select('document_id, status, metodo, arquivo_assinado_url')
           .in('document_id', docIds);
         signed = new Set((sigs || []).filter(s => s.status === 'assinado').map(s => s.document_id));
+        (sigs || []).forEach((s: any) =>
+          sigInfo.set(s.document_id, { metodo: s.metodo ?? null, arquivo: s.arquivo_assinado_url ?? null }));
       }
 
       const grouped: Record<string, AdmissionDoc[]> = {};
       for (const d of docs || []) {
         const status = d.document_id && signed.has(d.document_id) ? 'assinado' : d.status;
-        (grouped[d.process_id] ||= []).push({ ...d, status });
+        const info = d.document_id ? sigInfo.get(d.document_id) : undefined;
+        (grouped[d.process_id] ||= []).push({
+          ...d, status, metodo: info?.metodo ?? null, arquivo_assinado_url: info?.arquivo ?? null,
+        });
       }
       setDocsByProcess(grouped);
     } else {
@@ -256,6 +264,22 @@ export default function AdmissionsPage() {
     if (doc.file_url) await supabase.storage.from('documentos').remove([doc.file_url]);
     toast({ title: 'Documento removido' });
     load();
+  };
+
+  const downloadSigned = async (path: string, titulo: string) => {
+    const { data, error } = await supabase.storage.from('documentos').download(path);
+    if (error || !data) {
+      toast({ title: 'Erro ao baixar arquivo', description: error?.message, variant: 'destructive' });
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${titulo.replace(/[^\w\s-]/g, '')}-assinado.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const pendingRequired = (processId: string) =>
@@ -422,7 +446,24 @@ export default function AdmissionsPage() {
                     <p className="text-xs text-muted-foreground">
                       {d.obrigatorio ? 'Obrigatório' : 'Opcional'}
                       {d.requer_assinatura ? ' · exige assinatura' : ''}
+                      {d.metodo === 'govbr' ? ' · assinado no gov.br' : ''}
                     </p>
+                    {d.arquivo_assinado_url && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadSigned(d.arquivo_assinado_url!, d.titulo)}
+                        >
+                          <Download className="w-3 h-3 mr-1" /> Arquivo assinado
+                        </Button>
+                        <a href="https://validar.iti.gov.br" target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="sm">
+                            <ExternalLink className="w-3 h-3 mr-1" /> Conferir no validador oficial
+                          </Button>
+                        </a>
+                      </div>
+                    )}
                   </div>
                   <StatusBadge status={d.status} />
                   <Button variant="ghost" size="icon" onClick={() => removeDoc(d)}>
