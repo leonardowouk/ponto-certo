@@ -64,8 +64,9 @@ serve(async (req) => {
     if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) {
       return json({ success: false, message: 'CPF inválido.' }, 400);
     }
-    if (!selfieImage.startsWith('data:image/')) {
-      return json({ success: false, message: 'Foto inválida.' }, 400);
+    const imageError = validateImage(selfieImage);
+    if (imageError) {
+      return json({ success: false, message: imageError }, 400);
     }
     if (!deviceSecret) {
       return json({ success: false, message: 'Dispositivo inválido.' }, 400);
