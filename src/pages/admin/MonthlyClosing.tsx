@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { EmployeeReviewModal } from '@/components/admin/EmployeeReviewModal';
 import { TimesheetPrintView } from '@/components/admin/TimesheetPrintView';
+import { buildReviewDays } from '@/lib/reviewDays';
 import { useToast } from '@/hooks/use-toast';
 import { format, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -256,46 +257,9 @@ export default function MonthlyClosing() {
   };
 
   const handleOpenPrint = async (empId: string, empName: string) => {
-    const startDate = selectedMonth;
-    const endDate = format(new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0), 'yyyy-MM-dd');
-
-    // Load timesheets
-    const { data } = await supabase
-      .from('timesheets_daily')
-      .select('*')
-      .eq('employee_id', empId)
-      .gte('work_date', startDate)
-      .lte('work_date', endDate)
-      .order('work_date', { ascending: true });
-
-    // Load punches
-    const { data: punchData } = await supabase
-      .from('time_punches')
-      .select('id, punch_type, punched_at, status')
-      .eq('employee_id', empId)
-      .gte('punched_at', startDate + 'T00:00:00')
-      .lte('punched_at', endDate + 'T23:59:59')
-      .order('punched_at', { ascending: true });
-
-    const punchMap = new Map<string, any[]>();
-    (punchData || []).forEach(p => {
-      const date = format(new Date(p.punched_at), 'yyyy-MM-dd');
-      if (!punchMap.has(date)) punchMap.set(date, []);
-      punchMap.get(date)!.push(p);
-    });
-
-    const days = (data || []).map(d => ({ ...d, punches: punchMap.get(d.work_date) || [] }));
-    const totals = days.reduce(
-      (acc, d) => ({
-        worked: acc.worked + (d.worked_minutes || 0),
-        expected: acc.expected + (d.expected_minutes || 0),
-        balance: acc.balance + (d.balance_minutes || 0),
-        breaks: acc.breaks + (d.break_minutes || 0),
-      }),
-      { worked: 0, expected: 0, balance: 0, breaks: 0 }
-    );
-
-    setPrintDays(days);
+    // Same computation as the Conferência (review) screen
+    const { days, totals } = await buildReviewDays(empId, refMonth);
+    setPrintDays(days.map(d => ({ ...d, status: d.isMissing ? 'falta' : d.status })));
     setPrintTotals(totals);
     setPrintEmployee({ id: empId, name: empName });
   };

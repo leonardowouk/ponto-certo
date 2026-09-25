@@ -89,10 +89,6 @@ export function TimesheetPrintView({ employeeName, companyName, refMonth, days, 
               <th className="border p-1 text-center">Saída Int.</th>
               <th className="border p-1 text-center">Retorno Int.</th>
               <th className="border p-1 text-center">Saída</th>
-              <th className="border p-1 text-center">Entrada</th>
-              <th className="border p-1 text-center">Int. Início</th>
-              <th className="border p-1 text-center">Int. Fim</th>
-              <th className="border p-1 text-center">Saída</th>
               <th className="border p-1 text-center">Trab.</th>
               <th className="border p-1 text-center">Esper.</th>
               <th className="border p-1 text-center">Saldo</th>
