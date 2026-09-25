@@ -12,6 +12,7 @@ import { CheckCircle, Loader2, Pencil, Save, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { recalculateHourBankBalance, getExpectedMinutesForDate } from '@/lib/hourBank';
 import { approveCorrection, rejectCorrection } from '@/lib/punchCorrections';
+import { buildReviewDays } from '@/lib/reviewDays';
 
 interface Punch {
   id: string;
@@ -91,155 +92,13 @@ export function EmployeeReviewModal({
     if (open) loadDays();
   }, [open, employeeId, refMonth]);
 
-  const getExpectedWorkDays = async (): Promise<Set<string>> => {
-    const startDate = new Date(refMonth.getFullYear(), refMonth.getMonth(), 1);
-    const endDate = new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0);
-    const allDays = eachDayOfInterval({ start: startDate, end: endDate });
-
-    // Try employee work_schedule first
-    const { data: ws } = await supabase
-      .from('work_schedules')
-      .select('weekly_days')
-      .eq('employee_id', employeeId)
-      .maybeSingle();
-
-    let weeklyDays: Record<string, boolean> | null = null;
-
-    if (ws?.weekly_days) {
-      weeklyDays = ws.weekly_days as Record<string, boolean>;
-    } else {
-      // Try sector schedule
-      const { data: emp } = await supabase
-        .from('employees')
-        .select('sector_id')
-        .eq('id', employeeId)
-        .maybeSingle();
-
-      if (emp?.sector_id) {
-        const { data: ss } = await supabase
-          .from('sector_schedules')
-          .select('weekly_days')
-          .eq('sector_id', emp.sector_id)
-          .maybeSingle();
-
-        if (ss?.weekly_days) {
-          weeklyDays = ss.weekly_days as Record<string, boolean>;
-        }
-      }
-    }
-
-    // Default: mon-fri
-    if (!weeklyDays) {
-      weeklyDays = { mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false };
-    }
-
-    const workDates = new Set<string>();
-    for (const day of allDays) {
-      const key = dayOfWeekKey(getDay(day));
-      if (weeklyDays[key]) {
-        workDates.add(format(day, 'yyyy-MM-dd'));
-      }
-    }
-    return workDates;
-  };
-
   const loadDays = async () => {
     setLoading(true);
     const startDate = format(refMonth, 'yyyy-MM-dd');
     const endDate = format(new Date(refMonth.getFullYear(), refMonth.getMonth() + 1, 0), 'yyyy-MM-dd');
 
-    const [tsResult, punchResult, expectedDays] = await Promise.all([
-      supabase
-        .from('timesheets_daily')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .gte('work_date', startDate)
-        .lte('work_date', endDate)
-        .order('work_date', { ascending: true }),
-      supabase
-        .from('time_punches')
-        .select('id, punch_type, punched_at, status')
-        .eq('employee_id', employeeId)
-        .gte('punched_at', startDate + 'T00:00:00')
-        .lte('punched_at', endDate + 'T23:59:59')
-        .order('punched_at', { ascending: true }),
-      getExpectedWorkDays(),
-    ]);
-
-    const tsData = tsResult.data || [];
-    const punchData = punchResult.data || [];
-
-    // Compute the canonical expected minutes for this employee (schedule-based).
-    // This overrides any stale/zero value previously persisted in timesheets_daily.
-    const canonicalExpected = await getExpectedMinutesForDate(
-      employeeId,
-      format(refMonth, 'yyyy-MM-dd')
-    );
-
-    // Group punches by date
-    const punchMap = new Map<string, Punch[]>();
-    punchData.forEach(p => {
-      const date = format(new Date(p.punched_at), 'yyyy-MM-dd');
-      if (!punchMap.has(date)) punchMap.set(date, []);
-      punchMap.get(date)!.push(p as Punch);
-    });
-
-    // Map existing timesheets
-    const tsMap = new Map<string, any>();
-    tsData.forEach(d => tsMap.set(d.work_date, d));
-
-    // Build full list: all expected days
-    const allDaysList: DayWithPunches[] = [];
-    const sortedDates = Array.from(expectedDays).sort();
-
-    for (const dateStr of sortedDates) {
-      const existing = tsMap.get(dateStr);
-      if (existing) {
-        const worked = existing.worked_minutes || 0;
-        // 'abono' days do not penalize the balance — they neutralize the missing hours
-        const isAbono = existing.status === 'abono';
-        allDaysList.push({
-          ...existing,
-          expected_minutes: canonicalExpected,
-          balance_minutes: isAbono ? 0 : worked - canonicalExpected,
-          punches: punchMap.get(dateStr) || [],
-          isMissing: false,
-        });
-      } else {
-        // Missing day - expected to work but no timesheet
-        allDaysList.push({
-          id: `missing-${dateStr}`,
-          work_date: dateStr,
-          first_punch_at: null,
-          last_punch_at: null,
-          worked_minutes: 0,
-          expected_minutes: canonicalExpected,
-          balance_minutes: -canonicalExpected,
-          break_minutes: 0,
-          status: null,
-          notes: null,
-          punches: [],
-          isMissing: true,
-        });
-      }
-    }
-
-    // Also include any timesheet days that are NOT in expected (e.g. extra days worked)
-    for (const ts of tsData) {
-      if (!expectedDays.has(ts.work_date)) {
-        allDaysList.push({
-          ...ts,
-          // Days outside the scheduled week count as fully extra (no expected hours)
-          expected_minutes: 0,
-          balance_minutes: ts.worked_minutes || 0,
-          punches: punchMap.get(ts.work_date) || [],
-          isMissing: false,
-        });
-      }
-    }
-
-    allDaysList.sort((a, b) => a.work_date.localeCompare(b.work_date));
-    setDays(allDaysList);
+    const { days: built } = await buildReviewDays(employeeId, refMonth);
+    setDays(built as DayWithPunches[]);
 
     // Load pending corrections for the month
     const { data: corrs } = await supabase
